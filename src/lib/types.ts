@@ -58,7 +58,7 @@ export interface ThreadsProfile {
   id: string;
   username: string;
   bio?: string;
-  followers_count: number;
+  followers_count?: number | null;
   following_count?: number;
   threads_profile_picture_url?: string;
 }
