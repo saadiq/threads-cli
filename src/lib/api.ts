@@ -32,20 +32,20 @@ export class ThreadsAPI {
       id: data.id,
       username: data.username,
       bio: data.threads_biography,
-      followers_count: 0, // Fetched separately
       threads_profile_picture_url: data.threads_profile_picture_url,
     };
   }
 
   async getFollowerCount(): Promise<number> {
-    const data = await this.fetch<any>(`/me?fields=followers_count`);
-    return data.followers_count || 0;
+    const data = await this.fetch<any>(`/me/threads_insights?metric=followers_count`);
+    const metric = data.data?.find((m: any) => m.name === "followers_count");
+    return metric?.total_value?.value || 0;
   }
 
   async getInsights(): Promise<ThreadsInsights> {
     const profile = await this.getProfile();
-    const followersCount = await this.getFollowerCount();
-    return { ...profile, followers_count: followersCount };
+    const followers_count = await this.getFollowerCount().catch(() => null);
+    return { ...profile, followers_count };
   }
 
   async getPosts(limit: number = 25): Promise<ThreadsPost[]> {
