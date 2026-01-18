@@ -1,111 +1,44 @@
----
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
-globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
-alwaysApply: false
----
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+## Commands
 
-## APIs
+```bash
+# Run CLI
+bun run src/index.ts <command>
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+# Run all tests
+bun test
 
-## Testing
+# Run specific test file
+bun test src/lib/config.test.ts
 
-Use `bun test` to run tests.
-
-```ts#index.test.ts
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+# TypeScript check
+bun run typecheck
 ```
 
-## Frontend
+## Architecture
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+This is a CLI tool for publishing to Threads and fetching Threads data as JSON.
 
-Server:
+**Entry point:** `src/index.ts` - Wires Commander.js commands together.
 
-```ts#index.ts
-import index from "./index.html"
+**Commands** (`src/commands/`): Each command module exports a `create*Command()` factory that returns a configured Commander instance. Commands handle CLI concerns (args, output) and delegate to lib modules.
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+**Libraries** (`src/lib/`):
+- `types.ts` - All TypeScript interfaces (Config, Draft, API responses)
+- `config.ts` - Loads/saves `~/.threads-cli/config.json`, supports `THREADS_CLI_CONFIG_DIR` env override for testing
+- `drafts.ts` - Parses markdown files with gray-matter frontmatter
+- `api.ts` - `ThreadsAPI` class wrapping Threads Graph API
+- `auth.ts` - OAuth flow and token management (auto-refresh on expiry)
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+**Utilities** (`src/utils/`): `display.ts` - Terminal output helpers for preview boxes.
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+## Key Patterns
 
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- Config stored at `~/.threads-cli/config.json` with 0o600 permissions
+- Drafts are markdown files with YAML frontmatter (title, image, alt, created)
+- All data commands (posts, profile) output JSON to stdout
+- Auth check pattern: `getValidAccessToken()` returns null if not authenticated
+- Path traversal protection in draft delete command
