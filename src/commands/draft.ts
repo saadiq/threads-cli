@@ -58,7 +58,7 @@ export function createDraftCommand(): Command {
       const draftsDir = expandPath(config.paths.drafts);
       const filePath = resolve(draftsDir, file);
 
-      if (!filePath.startsWith(draftsDir)) {
+      if (!filePath.startsWith(draftsDir + '/') && filePath !== draftsDir) {
         console.error("Invalid file path: must be within drafts directory");
         process.exit(1);
       }
