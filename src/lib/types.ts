@@ -1,0 +1,73 @@
+export interface AuthConfig {
+  app_id: string;
+  app_secret: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: string;
+  user_id?: string;
+}
+
+export interface PathsConfig {
+  drafts: string;
+  archive: string;
+}
+
+export interface SettingsConfig {
+  archive_after_publish: boolean;
+  default_limit: number;
+}
+
+export interface Config {
+  auth: AuthConfig;
+  paths: PathsConfig;
+  settings: SettingsConfig;
+}
+
+export interface DraftFrontmatter {
+  title?: string;
+  image?: string;
+  alt?: string;
+  created?: string;
+}
+
+export interface Draft {
+  frontmatter: DraftFrontmatter;
+  content: string;
+  filePath: string;
+}
+
+export interface PostMetrics {
+  views: number;
+  likes: number;
+  replies: number;
+  reposts: number;
+  quotes: number;
+}
+
+export interface ThreadsPost {
+  id: string;
+  text: string;
+  created_at: string;
+  url: string;
+  media_type?: string;
+  media_url?: string;
+  metrics?: PostMetrics;
+}
+
+export interface ThreadsProfile {
+  id: string;
+  username: string;
+  bio?: string;
+  followers_count: number;
+  following_count?: number;
+  threads_profile_picture_url?: string;
+}
+
+export interface ThreadsInsights extends ThreadsProfile {
+  demographics?: {
+    countries?: Record<string, number>;
+    cities?: Record<string, number>;
+    age?: Record<string, number>;
+    gender?: Record<string, number>;
+  };
+}
