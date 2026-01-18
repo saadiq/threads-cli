@@ -1,5 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from "fs";
-import { existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, chmodSync, existsSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
 import type { Config } from "./types";
@@ -33,7 +32,22 @@ export function loadConfig(): Config {
     return { ...DEFAULT_CONFIG };
   }
   const content = readFileSync(configPath, "utf-8");
-  return { ...DEFAULT_CONFIG, ...JSON.parse(content) };
+
+  let userConfig: Partial<Config>;
+  try {
+    userConfig = JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `Failed to parse config file at ${configPath}: ${error instanceof Error ? error.message : "Invalid JSON"}`
+    );
+  }
+
+  // Deep merge to preserve nested defaults when user only partially configures a section
+  return {
+    auth: { ...DEFAULT_CONFIG.auth, ...userConfig.auth },
+    paths: { ...DEFAULT_CONFIG.paths, ...userConfig.paths },
+    settings: { ...DEFAULT_CONFIG.settings, ...userConfig.settings },
+  };
 }
 
 export function saveConfig(config: Config): void {
