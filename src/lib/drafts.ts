@@ -3,6 +3,8 @@ import { join, basename } from "path";
 import matter from "gray-matter";
 import type { Draft, DraftFrontmatter } from "./types";
 
+export const DRAFT_CHAR_LIMIT = 500;
+
 export function parseDraft(filePath: string): Draft {
   const content = readFileSync(filePath, "utf-8");
   const { data, content: body } = matter(content);
@@ -40,14 +42,13 @@ export function listDrafts(draftsDir: string): Draft[] {
 
 export function validateDraft(draft: Draft): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  const charLimit = 500;
 
   if (!draft.content || draft.content.trim().length === 0) {
     errors.push("Draft has no content");
   }
 
-  if (draft.content.length > charLimit) {
-    errors.push(`Content exceeds ${charLimit} characters (${draft.content.length})`);
+  if (draft.content.length > DRAFT_CHAR_LIMIT) {
+    errors.push(`Content exceeds ${DRAFT_CHAR_LIMIT} characters (${draft.content.length})`);
   }
 
   return { valid: errors.length === 0, errors };
