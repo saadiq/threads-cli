@@ -1,8 +1,22 @@
 import { Command } from "commander";
-import { createServer } from "http";
+import { createServer } from "https";
+import { readFileSync, existsSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { loadConfig, saveConfig } from "../lib/config";
-import { getAuthUrl, exchangeCodeForToken, getValidAccessToken } from "../lib/auth";
+import { getAuthUrl, exchangeCodeForToken, exchangeForLongLivedToken, getValidAccessToken, TOKEN_EXPIRY_DAYS } from "../lib/auth";
 import * as readline from "readline";
+
+function getOpenCommand(platform: NodeJS.Platform): string {
+  switch (platform) {
+    case "darwin":
+      return "open";
+    case "win32":
+      return "start";
+    default:
+      return "xdg-open";
+  }
+}
 
 export function createAuthCommand(): Command {
   const auth = new Command("auth").description("Manage authentication");
@@ -26,7 +40,7 @@ export function createAuthCommand(): Command {
         console.log("\nNo app credentials found. Let's set them up.\n");
         console.log("1. Go to https://developers.facebook.com/apps");
         console.log("2. Create a new app with Threads API access");
-        console.log("3. Add http://localhost:3000/callback as a redirect URI\n");
+        console.log("3. Add https://localhost:3000/callback as a redirect URI\n");
 
         config.auth.app_id = await question("Meta App ID: ");
         config.auth.app_secret = await question("Meta App Secret: ");
@@ -52,18 +66,40 @@ export function createAuthCommand(): Command {
       console.log(`If browser doesn't open, visit: ${authUrl}\n`);
 
       // Open browser
-      const openCmd =
-        process.platform === "darwin"
-          ? "open"
-          : process.platform === "win32"
-            ? "start"
-            : "xdg-open";
+      const openCmd = getOpenCommand(process.platform);
       Bun.spawn([openCmd, authUrl]);
 
       // Wait for callback
       const code = await new Promise<string>((resolve, reject) => {
-        const server = createServer((req, res) => {
-          const url = new URL(req.url!, `http://localhost:3000`);
+        // Look for SSL certs
+        const configDir = join(homedir(), ".threads-cli");
+        const certPaths = [
+          { cert: join(configDir, "localhost.pem"), key: join(configDir, "localhost-key.pem") },
+          { cert: "localhost.pem", key: "localhost-key.pem" },
+        ];
+
+        let sslOptions: { cert: Buffer; key: Buffer } | null = null;
+        for (const paths of certPaths) {
+          if (existsSync(paths.cert) && existsSync(paths.key)) {
+            sslOptions = {
+              cert: readFileSync(paths.cert),
+              key: readFileSync(paths.key),
+            };
+            break;
+          }
+        }
+
+        if (!sslOptions) {
+          console.error("\nSSL certificates not found. Run these commands:");
+          console.error("  mkcert -install");
+          console.error("  mkcert localhost");
+          console.error(`  mv localhost.pem localhost-key.pem ${configDir}/\n`);
+          reject(new Error("SSL certificates not found"));
+          return;
+        }
+
+        const server = createServer(sslOptions, (req, res) => {
+          const url = new URL(req.url!, `https://localhost:3000`);
           const code = url.searchParams.get("code");
           const error = url.searchParams.get("error");
 
@@ -88,26 +124,37 @@ export function createAuthCommand(): Command {
         });
 
         // Timeout after 5 minutes
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
           server.close();
           reject(new Error("Authorization timed out"));
         }, 5 * 60 * 1000);
+
+        server.on("close", () => {
+          clearTimeout(timeout);
+        });
       });
 
-      // Exchange code for token
+      // Exchange code for short-lived token
       console.log("Exchanging code for access token...");
-      const { accessToken, userId } = await exchangeCodeForToken(
+      const { accessToken: shortLivedToken, userId } = await exchangeCodeForToken(
         code,
         config.auth.app_id,
         config.auth.app_secret
       );
 
+      // Exchange for long-lived token (60 days)
+      console.log("Exchanging for long-lived token...");
+      const longLivedToken = await exchangeForLongLivedToken(
+        shortLivedToken,
+        config.auth.app_secret
+      );
+
       // Save tokens
-      config.auth.access_token = accessToken;
+      config.auth.access_token = longLivedToken;
       config.auth.user_id = userId;
       config.auth.expires_at = new Date(
-        Date.now() + 60 * 24 * 60 * 60 * 1000
-      ).toISOString(); // 60 days
+        Date.now() + TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000
+      ).toISOString();
       saveConfig(config);
 
       console.log("\n✓ Successfully authenticated!");
