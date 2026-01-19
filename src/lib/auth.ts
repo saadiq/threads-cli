@@ -10,6 +10,18 @@ export const TOKEN_EXPIRY_DAYS = 60;
 const TOKEN_EXPIRY_MS = TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Extracts user_id from raw JSON text to preserve precision.
+ * JavaScript loses precision on integers > 2^53, but Threads user IDs can exceed this.
+ */
+function extractUserIdFromJson(jsonText: string): string {
+  const match = jsonText.match(/"user_id"\s*:\s*(\d+)/);
+  if (!match) {
+    throw new Error("user_id not found in response");
+  }
+  return match[1];
+}
+
 export function getAuthUrl(appId: string): string {
   const params = new URLSearchParams({
     client_id: appId,
@@ -42,10 +54,12 @@ export async function exchangeCodeForToken(
     throw new Error(`Token exchange failed: ${error}`);
   }
 
-  const data = await response.json();
+  const text = await response.text();
+  const data = JSON.parse(text);
+
   return {
     accessToken: data.access_token,
-    userId: data.user_id,
+    userId: extractUserIdFromJson(text),
   };
 }
 
