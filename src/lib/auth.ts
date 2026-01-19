@@ -8,6 +8,7 @@ const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insi
 
 export const TOKEN_EXPIRY_DAYS = 60;
 const TOKEN_EXPIRY_MS = TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export function getAuthUrl(appId: string): string {
   const params = new URLSearchParams({
@@ -85,10 +86,10 @@ export async function refreshAccessToken(accessToken: string): Promise<string> {
 
 export function isTokenExpired(expiresAt?: string): boolean {
   if (!expiresAt) return true;
-  const expiry = new Date(expiresAt);
-  const now = new Date();
+  const expiryTime = new Date(expiresAt).getTime();
+  const nowTime = Date.now();
   // Consider expired if less than 1 day remaining
-  return expiry.getTime() - now.getTime() < 24 * 60 * 60 * 1000;
+  return expiryTime - nowTime < ONE_DAY_MS;
 }
 
 export async function getValidAccessToken(): Promise<{ token: string; userId: string } | null> {
