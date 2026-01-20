@@ -71,3 +71,8 @@ export interface ThreadsInsights extends ThreadsProfile {
     gender?: Record<string, number>;
   };
 }
+
+export interface ThreadPost {
+  content: string;
+  image?: string;
+}
