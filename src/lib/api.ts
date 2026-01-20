@@ -114,43 +114,35 @@ export class ThreadsAPI {
     }));
   }
 
-  async createTextPost(text: string): Promise<string> {
-    // Step 1: Create container
-    const containerData = await this.fetch<any>(`/${this.userId}/threads`, {
+  private async createAndPublish(params: Record<string, string>): Promise<string> {
+    const containerData = await this.fetch<{ id: string }>(`/${this.userId}/threads`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ media_type: "TEXT", text }),
+      body: new URLSearchParams(params),
     });
 
-    const containerId = containerData.id;
-
-    // Step 2: Publish
-    const publishData = await this.fetch<any>(`/${this.userId}/threads_publish`, {
+    const publishData = await this.fetch<{ id: string }>(`/${this.userId}/threads_publish`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ creation_id: containerId }),
+      body: new URLSearchParams({ creation_id: containerData.id }),
     });
 
     return publishData.id;
   }
 
-  async createImagePost(text: string, imageUrl: string): Promise<string> {
-    // Step 1: Create container with image
-    const containerData = await this.fetch<any>(`/${this.userId}/threads`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ media_type: "IMAGE", image_url: imageUrl, text }),
-    });
+  async createTextPost(text: string, replyToId?: string): Promise<string> {
+    const params: Record<string, string> = { media_type: "TEXT", text };
+    if (replyToId) {
+      params.reply_to_id = replyToId;
+    }
+    return this.createAndPublish(params);
+  }
 
-    const containerId = containerData.id;
-
-    // Step 2: Publish
-    const publishData = await this.fetch<any>(`/${this.userId}/threads_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ creation_id: containerId }),
-    });
-
-    return publishData.id;
+  async createImagePost(text: string, imageUrl: string, replyToId?: string): Promise<string> {
+    const params: Record<string, string> = { media_type: "IMAGE", image_url: imageUrl, text };
+    if (replyToId) {
+      params.reply_to_id = replyToId;
+    }
+    return this.createAndPublish(params);
   }
 }
