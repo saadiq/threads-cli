@@ -6,6 +6,7 @@ import { createDraftCommand } from "./commands/draft";
 import { createPostsCommand } from "./commands/posts";
 import { createProfileCommand } from "./commands/profile";
 import { createPublishCommand } from "./commands/publish";
+import { createThreadCommand } from "./commands/thread";
 
 const program = new Command();
 
@@ -20,5 +21,6 @@ program.addCommand(createDraftCommand());
 program.addCommand(createPostsCommand());
 program.addCommand(createProfileCommand());
 program.addCommand(createPublishCommand());
+program.addCommand(createThreadCommand());
 
 program.parse();
