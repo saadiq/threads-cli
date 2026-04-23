@@ -90,10 +90,18 @@ export class ThreadsAPI {
   }
 
   async getPostMetrics(postId: string): Promise<PostMetrics> {
-    const metrics = "views,likes,replies,reposts,quotes";
+    const metrics = "views,likes,replies,reposts,quotes,shares,clicks";
     const data = await this.fetch<any>(`/${postId}/insights?metric=${metrics}`);
 
-    const result: PostMetrics = { views: 0, likes: 0, replies: 0, reposts: 0, quotes: 0 };
+    const result: PostMetrics = {
+      views: 0,
+      likes: 0,
+      replies: 0,
+      reposts: 0,
+      quotes: 0,
+      shares: 0,
+      clicks: 0,
+    };
     for (const item of data.data || []) {
       const name = item.name as keyof PostMetrics;
       if (name in result) {

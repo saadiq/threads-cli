@@ -42,6 +42,8 @@ export interface PostMetrics {
   replies: number;
   reposts: number;
   quotes: number;
+  shares: number;
+  clicks: number;
 }
 
 export interface ThreadsPost {

@@ -134,3 +134,46 @@ describe("ThreadsAPI.createImagePost", () => {
     expect(createBody).toContain("alt_text=alt");
   });
 });
+
+describe("ThreadsAPI.getPostMetrics", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("requests and maps shares and clicks", async () => {
+    const { calls } = mockFetchSequence([
+      {
+        data: [
+          { name: "views", values: [{ value: 10 }] },
+          { name: "likes", values: [{ value: 2 }] },
+          { name: "replies", values: [{ value: 1 }] },
+          { name: "reposts", values: [{ value: 3 }] },
+          { name: "quotes", values: [{ value: 4 }] },
+          { name: "shares", values: [{ value: 5 }] },
+          { name: "clicks", values: [{ value: 6 }] },
+        ],
+      },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    const metrics = await api.getPostMetrics("p1");
+    expect(calls[0].url).toContain("metric=views%2Clikes%2Creplies%2Creposts%2Cquotes%2Cshares%2Cclicks");
+    expect(metrics).toEqual({
+      views: 10,
+      likes: 2,
+      replies: 1,
+      reposts: 3,
+      quotes: 4,
+      shares: 5,
+      clicks: 6,
+    });
+  });
+
+  test("defaults missing metrics to zero", async () => {
+    mockFetchSequence([{ data: [{ name: "views", values: [{ value: 9 }] }] }]);
+    const api = new ThreadsAPI("t", "u");
+    const metrics = await api.getPostMetrics("p1");
+    expect(metrics.views).toBe(9);
+    expect(metrics.shares).toBe(0);
+    expect(metrics.clicks).toBe(0);
+  });
+});
