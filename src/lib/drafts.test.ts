@@ -1,5 +1,13 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
-import { parseDraft, createDraft, listDrafts, validateDraft, DRAFT_CHAR_LIMIT } from "./drafts";
+import {
+  parseDraft,
+  createDraft,
+  listDrafts,
+  validateDraft,
+  countLinks,
+  DRAFT_CHAR_LIMIT,
+  DRAFT_LINK_LIMIT,
+} from "./drafts";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { Draft } from "./types";
@@ -105,5 +113,39 @@ describe("validateDraft", () => {
     const result = validateDraft(draft);
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
+  });
+
+  test("rejects content with 5+ links", () => {
+    const content = "see https://a.com https://b.com https://c.com https://d.com https://e.com";
+    const draft = createTestDraft(content);
+    const result = validateDraft(draft);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("THREADS_API__LINK_LIMIT_EXCEEDED"))).toBe(true);
+  });
+
+  test("accepts content with 4 links", () => {
+    const content = "see https://a.com https://b.com https://c.com https://d.com";
+    const draft = createTestDraft(content);
+    const result = validateDraft(draft);
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe("countLinks", () => {
+  test("returns 0 for no links", () => {
+    expect(countLinks("no links here")).toBe(0);
+  });
+
+  test("counts a single https link", () => {
+    expect(countLinks("go to https://example.com now")).toBe(1);
+  });
+
+  test("counts http and https links", () => {
+    expect(countLinks("http://a.com and https://b.com")).toBe(2);
+  });
+
+  test("matches the limit constant", () => {
+    const text = Array.from({ length: DRAFT_LINK_LIMIT }, (_, i) => `https://x${i}.com`).join(" ");
+    expect(countLinks(text)).toBe(DRAFT_LINK_LIMIT);
   });
 });

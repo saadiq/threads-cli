@@ -5,6 +5,7 @@ import { getValidAccessToken } from "../lib/auth";
 import { ThreadsAPI } from "../lib/api";
 import { loadConfig, expandPath } from "../lib/config";
 import type { ThreadPost } from "../lib/types";
+import { countLinks, DRAFT_LINK_LIMIT } from "../lib/drafts";
 import { confirm } from "../utils/display";
 
 const RATE_LIMIT_DELAY_MS = 1000;
@@ -57,6 +58,16 @@ export function createThreadCommand(): Command {
       if (posts.length === 1) {
         console.error("Thread must have at least 2 posts. Use 'publish' for single posts.");
         process.exit(1);
+      }
+
+      for (let i = 0; i < posts.length; i++) {
+        const links = countLinks(posts[i].content);
+        if (links >= DRAFT_LINK_LIMIT) {
+          console.error(
+            `Post ${i + 1} contains ${links} links; Threads rejects posts with ${DRAFT_LINK_LIMIT}+ links (THREADS_API__LINK_LIMIT_EXCEEDED)`
+          );
+          process.exit(1);
+        }
       }
 
       // Display preview

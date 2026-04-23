@@ -4,6 +4,11 @@ import matter from "gray-matter";
 import type { Draft, DraftFrontmatter } from "./types";
 
 export const DRAFT_CHAR_LIMIT = 500;
+export const DRAFT_LINK_LIMIT = 5;
+
+export function countLinks(text: string): number {
+  return text.match(/https?:\/\/\S+/g)?.length ?? 0;
+}
 
 export function parseDraft(filePath: string): Draft {
   const content = readFileSync(filePath, "utf-8");
@@ -49,6 +54,13 @@ export function validateDraft(draft: Draft): { valid: boolean; errors: string[] 
 
   if (draft.content.length > DRAFT_CHAR_LIMIT) {
     errors.push(`Content exceeds ${DRAFT_CHAR_LIMIT} characters (${draft.content.length})`);
+  }
+
+  const links = countLinks(draft.content);
+  if (links >= DRAFT_LINK_LIMIT) {
+    errors.push(
+      `Contains ${links} links; Threads rejects posts with ${DRAFT_LINK_LIMIT}+ links (THREADS_API__LINK_LIMIT_EXCEEDED)`
+    );
   }
 
   return { valid: errors.length === 0, errors };
