@@ -41,9 +41,14 @@ export function createAuthCommand(): Command {
         console.log("1. Go to https://developers.facebook.com/apps");
         console.log("2. Create a new app with Threads API access");
         console.log("3. Add https://localhost:3000/callback as a redirect URI\n");
+        console.log(
+          "Use the Threads App ID and Threads App secret from\n" +
+          "App Dashboard > App settings > Basic (NOT the Meta App\n" +
+          "ID/Secret at the top of that page — those are different).\n"
+        );
 
-        config.auth.app_id = await question("Meta App ID: ");
-        config.auth.app_secret = await question("Meta App Secret: ");
+        config.auth.app_id = await question("Threads App ID: ");
+        config.auth.app_secret = await question("Threads App secret: ");
 
         const draftsPath = await question(
           `Drafts folder [${config.paths.drafts}]: `

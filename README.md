@@ -30,6 +30,8 @@ bun install
 4. Set the **Redirect Callback URL** to: `https://localhost:3000/callback`
 5. Add yourself as a **Tester** under App Roles and accept the invitation in Threads settings
 
+> **Important:** This CLI authenticates against the **Threads** API, which uses a separate app ID/secret from the top-level Meta app. You'll need the **Threads App ID** and **Threads App secret**, found at **App Dashboard → App settings → Basic** (scroll down — they're distinct from the Meta App ID/Secret shown at the top of that page). Using the Meta App ID will fail with: `Authorization Failed: No app ID was sent with the request` (error 4476002).
+
 ### 2. Generate SSL Certificates
 
 Meta requires HTTPS for OAuth callbacks. Use [mkcert](https://github.com/FiloSottile/mkcert) to create local certificates:
@@ -55,7 +57,7 @@ mv localhost.pem localhost-key.pem ~/.threads-cli/
 bun run src/index.ts auth login
 ```
 
-This will prompt for your Meta App ID and App Secret, then open a browser for authorization.
+This will prompt for your **Threads App ID** and **Threads App secret** (see the note above — these are different from the Meta App ID/Secret), then open a browser for authorization.
 
 ## Usage
 
