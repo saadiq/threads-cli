@@ -1,6 +1,8 @@
 import type { ThreadsPost, ThreadsProfile, ThreadsInsights, PostMetrics } from "./types";
 
 const BASE_URL = "https://graph.threads.net/v1.0";
+const CONTAINER_POLL_TIMEOUT_MS = 60_000;
+const CONTAINER_POLL_INTERVAL_MS = 2_000;
 
 export function extractPostId(idOrUrl: string): string {
   const urlMatch = idOrUrl.match(/threads\.net\/@[\w.]+\/post\/(\w+)/);
@@ -114,12 +116,34 @@ export class ThreadsAPI {
     }));
   }
 
+  private async waitForContainer(
+    containerId: string,
+    { timeoutMs = CONTAINER_POLL_TIMEOUT_MS, intervalMs = CONTAINER_POLL_INTERVAL_MS }: { timeoutMs?: number; intervalMs?: number } = {}
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      const { status, error_message } = await this.fetch<{ status?: string; error_message?: string }>(
+        `/${containerId}?fields=status,error_message`
+      );
+      if (status === "FINISHED") return;
+      if (status === "ERROR" || status === "EXPIRED") {
+        throw new Error(`Threads container ${status}: ${error_message ?? "no error message"}`);
+      }
+      if (Date.now() + intervalMs > deadline) {
+        throw new Error(`Threads container not ready after ${timeoutMs}ms (status=${status ?? "unknown"})`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  }
+
   private async createAndPublish(params: Record<string, string>): Promise<string> {
     const containerData = await this.fetch<{ id: string }>(`/${this.userId}/threads`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(params),
     });
+
+    await this.waitForContainer(containerData.id);
 
     const publishData = await this.fetch<{ id: string }>(`/${this.userId}/threads_publish`, {
       method: "POST",
