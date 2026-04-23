@@ -28,11 +28,12 @@ export class ThreadsAPI {
   }
 
   async getProfile(): Promise<ThreadsProfile> {
-    const fields = "id,username,threads_profile_picture_url,threads_biography";
+    const fields = "id,username,name,threads_profile_picture_url,threads_biography";
     const data = await this.fetch<any>(`/me?fields=${fields}`);
     return {
       id: data.id,
       username: data.username,
+      name: data.name,
       bio: data.threads_biography,
       threads_profile_picture_url: data.threads_profile_picture_url,
     };

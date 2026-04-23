@@ -177,3 +177,26 @@ describe("ThreadsAPI.getPostMetrics", () => {
     expect(metrics.clicks).toBe(0);
   });
 });
+
+describe("ThreadsAPI.getProfile", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("requests name field and maps it", async () => {
+    const { calls } = mockFetchSequence([
+      {
+        id: "u1",
+        username: "user",
+        name: "Real Name",
+        threads_biography: "bio",
+        threads_profile_picture_url: "https://pic",
+      },
+    ]);
+    const api = new ThreadsAPI("t", "u1");
+    const profile = await api.getProfile();
+    expect(calls[0].url).toContain("name");
+    expect(profile.name).toBe("Real Name");
+    expect(profile.username).toBe("user");
+  });
+});

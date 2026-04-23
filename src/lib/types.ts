@@ -59,6 +59,7 @@ export interface ThreadsPost {
 export interface ThreadsProfile {
   id: string;
   username: string;
+  name?: string;
   bio?: string;
   followers_count?: number | null;
   following_count?: number;
