@@ -4,7 +4,12 @@ const THREADS_AUTH_URL = "https://threads.net/oauth/authorize";
 const THREADS_GRAPH_URL = "https://graph.threads.net";
 const THREADS_TOKEN_URL = `${THREADS_GRAPH_URL}/oauth/access_token`;
 const REDIRECT_URI = "https://localhost:3000/callback";
-const SCOPES = ["threads_basic", "threads_content_publish", "threads_manage_insights"];
+const SCOPES = [
+  "threads_basic",
+  "threads_content_publish",
+  "threads_manage_insights",
+  "threads_delete",
+];
 
 export const TOKEN_EXPIRY_DAYS = 60;
 const TOKEN_EXPIRY_MS = TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;

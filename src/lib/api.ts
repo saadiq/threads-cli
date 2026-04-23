@@ -167,6 +167,11 @@ export class ThreadsAPI {
     return publishData.id;
   }
 
+  async deletePost(postId: string): Promise<void> {
+    const id = extractPostId(postId);
+    await this.fetch<unknown>(`/${id}`, { method: "DELETE" });
+  }
+
   async createTextPost(text: string, replyToId?: string): Promise<string> {
     const params: Record<string, string> = { media_type: "TEXT", text };
     if (replyToId) {

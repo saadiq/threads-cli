@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { getValidAccessToken } from "../lib/auth";
-import { ThreadsAPI } from "../lib/api";
+import { ThreadsAPI, extractPostId } from "../lib/api";
+import { confirm } from "../utils/display";
 
 async function requireAuth(): Promise<ThreadsAPI> {
   const auth = await getValidAccessToken();
@@ -49,6 +50,32 @@ export function createPostsCommand(): Command {
         console.log(JSON.stringify(post, null, 2));
       } catch (error) {
         console.error("Failed to fetch post:", error);
+        process.exit(1);
+      }
+    });
+
+  posts
+    .command("delete <id>")
+    .description("Delete a post by ID or URL")
+    .option("-y, --yes", "Skip confirmation prompt")
+    .action(async (id: string, options) => {
+      const resolvedId = extractPostId(id);
+
+      if (!options.yes) {
+        const confirmed = await confirm(`Delete post ${resolvedId}?`);
+        if (!confirmed) {
+          console.log("Cancelled.");
+          return;
+        }
+      }
+
+      const api = await requireAuth();
+
+      try {
+        await api.deletePost(resolvedId);
+        console.log(`Deleted ${resolvedId}`);
+      } catch (error) {
+        console.error("Failed to delete post:", error);
         process.exit(1);
       }
     });

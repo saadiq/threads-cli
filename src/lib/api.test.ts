@@ -200,3 +200,25 @@ describe("ThreadsAPI.getProfile", () => {
     expect(profile.username).toBe("user");
   });
 });
+
+describe("ThreadsAPI.deletePost", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("issues DELETE to the post id", async () => {
+    const { calls } = mockFetchSequence([{ success: true }]);
+    const api = new ThreadsAPI("t", "u");
+    await api.deletePost("POST123");
+    expect(calls[0].url).toContain("/POST123");
+    expect(calls[0].init?.method).toBe("DELETE");
+  });
+
+  test("resolves URL to id before deleting", async () => {
+    const { calls } = mockFetchSequence([{ success: true }]);
+    const api = new ThreadsAPI("t", "u");
+    await api.deletePost("https://www.threads.net/@user/post/POST123");
+    expect(calls[0].url).toContain("/POST123");
+    expect(calls[0].url).not.toContain("threads.net%2F");
+  });
+});
