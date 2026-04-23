@@ -44,7 +44,8 @@ export function createAuthCommand(): Command {
         console.log(
           "Use the Threads App ID and Threads App secret from\n" +
           "App Dashboard > App settings > Basic (NOT the Meta App\n" +
-          "ID/Secret at the top of that page — those are different).\n"
+          "ID/Secret at the top of that page — those are different).\n" +
+          "Wrong ID fails with error 4476002.\n"
         );
 
         config.auth.app_id = await question("Threads App ID: ");
