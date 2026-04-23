@@ -118,9 +118,12 @@ export class ThreadsAPI {
 
   private async waitForContainer(
     containerId: string,
-    { timeoutMs = CONTAINER_POLL_TIMEOUT_MS, intervalMs = CONTAINER_POLL_INTERVAL_MS }: { timeoutMs?: number; intervalMs?: number } = {}
+    options: { timeoutMs?: number; intervalMs?: number } = {}
   ): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
+    const timeoutMs = options.timeoutMs ?? CONTAINER_POLL_TIMEOUT_MS;
+    const intervalMs = options.intervalMs ?? CONTAINER_POLL_INTERVAL_MS;
+    const startedAt = Date.now();
+    const deadline = startedAt + timeoutMs;
     while (true) {
       const { status, error_message } = await this.fetch<{ status?: string; error_message?: string }>(
         `/${containerId}?fields=status,error_message`
@@ -130,7 +133,8 @@ export class ThreadsAPI {
         throw new Error(`Threads container ${status}: ${error_message ?? "no error message"}`);
       }
       if (Date.now() + intervalMs > deadline) {
-        throw new Error(`Threads container not ready after ${timeoutMs}ms (status=${status ?? "unknown"})`);
+        const elapsedMs = Date.now() - startedAt;
+        throw new Error(`Threads container not ready after ${elapsedMs}ms (timeout ${timeoutMs}ms, status=${status ?? "unknown"})`);
       }
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
