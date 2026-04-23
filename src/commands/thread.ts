@@ -17,11 +17,13 @@ function parseThreadFile(filePath: string): ThreadPost[] {
 
   return parts.map((part) => {
     // Check for simple image syntax: ![alt](url) at start
-    const imageMatch = part.match(/^!\[.*?\]\((.*?)\)\n*/);
+    const imageMatch = part.match(/^!\[(.*?)\]\((.*?)\)\n*/);
     if (imageMatch) {
+      const alt = imageMatch[1].trim();
       return {
         content: part.replace(imageMatch[0], "").trim(),
-        image: imageMatch[1],
+        image: imageMatch[2],
+        ...(alt ? { alt } : {}),
       };
     }
     return { content: part };
@@ -102,7 +104,7 @@ export function createThreadCommand(): Command {
           console.log(`Publishing post ${i + 1}/${posts.length}...`);
 
           const postId = post.image
-            ? await api.createImagePost(post.content, post.image, previousPostId)
+            ? await api.createImagePost(post.content, post.image, previousPostId, post.alt)
             : await api.createTextPost(post.content, previousPostId);
 
           const posted = await api.getPost(postId);

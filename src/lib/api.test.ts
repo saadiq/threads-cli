@@ -1,14 +1,19 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { ThreadsAPI, extractPostId } from "./api";
 
-function mockFetchSequence(responses: Array<Record<string, unknown>>): ReturnType<typeof spyOn> {
+function mockFetchSequence(responses: Array<Record<string, unknown>>): {
+  calls: Array<{ url: string; init?: RequestInit }>;
+} {
   const queue = [...responses];
-  const impl = (async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const impl = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
     const body = queue.shift();
     if (!body) throw new Error("mockFetchSequence: ran out of responses");
     return new Response(JSON.stringify(body), { status: 200 });
   }) as unknown as typeof fetch;
-  return spyOn(globalThis, "fetch").mockImplementation(impl);
+  spyOn(globalThis, "fetch").mockImplementation(impl);
+  return { calls };
 }
 
 describe("extractPostId", () => {
@@ -83,5 +88,49 @@ describe("ThreadsAPI.waitForContainer", () => {
     await expect(
       api.waitForContainer("c1", { timeoutMs: 50, intervalMs: 20 })
     ).rejects.toThrow(/not ready after \d+ms \(timeout 50ms, status=IN_PROGRESS\)/);
+  });
+});
+
+describe("ThreadsAPI.createImagePost", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("sends alt_text when provided", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    const id = await api.createImagePost("hello", "https://example.com/x.png", undefined, "my alt");
+    expect(id).toBe("post1");
+    const createBody = (calls[0].init?.body as URLSearchParams).toString();
+    expect(createBody).toContain("alt_text=my+alt");
+  });
+
+  test("omits alt_text when not provided", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createImagePost("hello", "https://example.com/x.png");
+    const createBody = (calls[0].init?.body as URLSearchParams).toString();
+    expect(createBody).not.toContain("alt_text");
+  });
+
+  test("forwards both reply_to_id and alt_text", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createImagePost("hello", "https://example.com/x.png", "parent123", "alt");
+    const createBody = (calls[0].init?.body as URLSearchParams).toString();
+    expect(createBody).toContain("reply_to_id=parent123");
+    expect(createBody).toContain("alt_text=alt");
   });
 });

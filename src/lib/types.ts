@@ -75,4 +75,5 @@ export interface ThreadsInsights extends ThreadsProfile {
 export interface ThreadPost {
   content: string;
   image?: string;
+  alt?: string;
 }

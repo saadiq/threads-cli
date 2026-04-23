@@ -66,7 +66,12 @@ export function createPublishCommand(): Command {
       try {
         let postId: string;
         if (draft.frontmatter.image) {
-          postId = await api.createImagePost(draft.content, draft.frontmatter.image);
+          postId = await api.createImagePost(
+            draft.content,
+            draft.frontmatter.image,
+            undefined,
+            draft.frontmatter.alt
+          );
         } else {
           postId = await api.createTextPost(draft.content);
         }

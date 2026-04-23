@@ -166,10 +166,18 @@ export class ThreadsAPI {
     return this.createAndPublish(params);
   }
 
-  async createImagePost(text: string, imageUrl: string, replyToId?: string): Promise<string> {
+  async createImagePost(
+    text: string,
+    imageUrl: string,
+    replyToId?: string,
+    altText?: string
+  ): Promise<string> {
     const params: Record<string, string> = { media_type: "IMAGE", image_url: imageUrl, text };
     if (replyToId) {
       params.reply_to_id = replyToId;
+    }
+    if (altText) {
+      params.alt_text = altText;
     }
     return this.createAndPublish(params);
   }
