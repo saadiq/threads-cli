@@ -39,6 +39,14 @@ This is a CLI tool for publishing to Threads and fetching Threads data as JSON.
 
 - Config stored at `~/.threads-cli/config.json` with 0o600 permissions
 - Drafts are markdown files with YAML frontmatter (title, image, alt, created)
+- Thread files are markdown with posts separated by `---` on its own line; optional `![alt](url)` at the start of a post attaches an image
 - All data commands (posts, profile) output JSON to stdout
 - Auth check pattern: `getValidAccessToken()` returns null if not authenticated
 - Path traversal protection in draft delete command
+
+## Gotchas
+
+- **OAuth requires local HTTPS**: `auth login` spins up a server on `https://localhost:3000/callback` and expects `localhost.pem` + `localhost-key.pem` in `~/.threads-cli/` (generated via `mkcert localhost`). Without them, login fails before opening the browser.
+- **Threads publish is a 3-step async flow** (`api.ts` `createAndPublish`): POST to `/threads` to get a container id → poll `/{id}?fields=status` until `FINISHED` (timeout 60s) → POST to `/threads_publish`. Don't skip the poll; containers can be `ERROR`/`EXPIRED`.
+- **Thread chaining** uses `reply_to_id` on each subsequent post; `thread.ts` sleeps `RATE_LIMIT_DELAY_MS` (1s) between posts to avoid rate limits.
+- **App ID pitfall**: the Threads App ID/Secret (App settings → Basic, scroll down) are distinct from the Meta App ID/Secret at the top of the same page. Using the Meta ones fails with error 4476002.
