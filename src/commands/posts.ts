@@ -75,7 +75,13 @@ export function createPostsCommand(): Command {
         await api.deletePost(resolvedId);
         console.log(`Deleted ${resolvedId}`);
       } catch (error) {
-        console.error("Failed to delete post:", error);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("Failed to delete post:", message);
+        if (message.includes("permission")) {
+          console.error(
+            "Hint: if you authenticated before delete was supported, run 'threads auth login' again to grant the threads_delete scope."
+          );
+        }
         process.exit(1);
       }
     });

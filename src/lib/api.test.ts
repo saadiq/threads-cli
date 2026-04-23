@@ -195,7 +195,7 @@ describe("ThreadsAPI.getProfile", () => {
     ]);
     const api = new ThreadsAPI("t", "u1");
     const profile = await api.getProfile();
-    expect(calls[0].url).toContain("name");
+    expect(calls[0].url).toContain("fields=id%2Cusername%2Cname");
     expect(profile.name).toBe("Real Name");
     expect(profile.username).toBe("user");
   });
