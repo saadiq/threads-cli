@@ -9,6 +9,8 @@ const SCOPES = [
   "threads_content_publish",
   "threads_manage_insights",
   "threads_delete",
+  "threads_manage_replies",
+  "threads_read_replies",
 ];
 
 export const TOKEN_EXPIRY_DAYS = 60;
