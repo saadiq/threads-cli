@@ -5,6 +5,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { loadConfig, saveConfig } from "../lib/config";
 import { getAuthUrl, exchangeCodeForToken, exchangeForLongLivedToken, getValidAccessToken, TOKEN_EXPIRY_DAYS } from "../lib/auth";
+import { readSecret } from "../utils/display";
 import * as readline from "readline";
 
 function getOpenCommand(platform: NodeJS.Platform): string {
@@ -49,7 +50,7 @@ export function createAuthCommand(): Command {
         );
 
         config.auth.app_id = await question("Threads App ID: ");
-        config.auth.app_secret = await question("Threads App secret: ");
+        config.auth.app_secret = await readSecret("Threads App secret: ");
 
         const draftsPath = await question(
           `Drafts folder [${config.paths.drafts}]: `
