@@ -36,17 +36,77 @@ function chunkString(str: string, length: number): string[] {
   return chunks;
 }
 
+export async function readSecret(prompt: string): Promise<string> {
+  if (!process.stdin.isTTY) {
+    // Non-TTY fallback: read line without masking
+    process.stdout.write(prompt);
+    const buf = await new Promise<Buffer>((resolve) => {
+      process.stdin.once("data", (data: Buffer) => resolve(data));
+    });
+    return buf.toString().trimEnd();
+  }
+
+  // TTY: read with asterisk masking
+  process.stdout.write(prompt);
+
+  return new Promise<string>((resolve) => {
+    const stdin = process.stdin;
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    const buf: string[] = [];
+
+    const handler = (char: Buffer) => {
+      const str = char.toString();
+
+      switch (str) {
+        case "\r":
+        case "\n":
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off("data", handler);
+          process.stdout.write("\n");
+          resolve(buf.join(""));
+          break;
+        case "\x7f":
+        case "\b":
+          if (buf.length > 0) {
+            buf.pop();
+            process.stdout.write("\b \b");
+          }
+          break;
+        case "\x03":
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.off("data", handler);
+          process.stdout.write("^C\n");
+          process.exit(1);
+          break;
+        default:
+          buf.push(str);
+          process.stdout.write("*");
+          break;
+      }
+    };
+
+    stdin.on("data", handler);
+  });
+}
+
 export async function confirm(message: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    // Non-TTY (CI, pipes): cannot prompt, default to false
+    console.log(`${message} [y/N] N (non-interactive)`);
+    return false;
+  }
+
   process.stdout.write(`${message} [y/N] `);
 
-  const response = await new Promise<string>((resolve) => {
-    let data = "";
+  return await new Promise<boolean>((resolve) => {
     process.stdin.setRawMode?.(false);
-    process.stdin.once("data", (chunk) => {
-      data = chunk.toString().trim().toLowerCase();
-      resolve(data);
+    process.stdin.once("data", (chunk: Buffer) => {
+      const response = chunk.toString().trim().toLowerCase();
+      resolve(response === "y" || response === "yes");
     });
   });
-
-  return response === "y" || response === "yes";
 }
