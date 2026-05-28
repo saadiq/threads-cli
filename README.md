@@ -170,6 +170,11 @@ Config is stored at `~/.threads-cli/config.json`:
 }
 ```
 
+> **Security note:** `app_secret` and `access_token` are stored in **plaintext** in this file.
+> The file is created with `0o600` permissions (owner read/write only), but anyone with access to
+> your user account can read these credentials. Treat `~/.threads-cli/config.json` like any other
+> secret, and run `threads auth logout` to clear the stored token when needed.
+
 ### Environment Variables
 
 - `THREADS_CLI_CONFIG_DIR` - Override the config directory (useful for testing)
