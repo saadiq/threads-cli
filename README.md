@@ -5,7 +5,9 @@ A CLI tool for publishing to Threads and fetching Threads data as JSON.
 ## Features
 
 - OAuth authentication with Meta's Threads API
-- Publish text and image posts from markdown drafts
+- Publish text, image, video, and carousel (2–20 item) posts from markdown drafts
+- Publish multi-post threads from a single file
+- Attach links, GIFs, and topic tags to posts
 - Fetch posts with engagement metrics (views, likes, replies, reposts, quotes)
 - View profile and follower insights
 - Draft management with YAML frontmatter support
@@ -90,6 +92,9 @@ threads profile --insights
 # List recent posts with metrics
 threads posts list
 threads posts list --limit 50
+
+# Fetch all posts since a date, paging as needed
+# (--since returns every matching post; --limit is ignored here)
 threads posts list --since 2024-01-01
 
 # Get a specific post by ID or URL
@@ -126,6 +131,17 @@ threads publish my-draft.md --yes
 threads publish my-draft.md --dry-run
 ```
 
+### Threads (multi-post)
+
+```bash
+# Publish a thread of connected posts from one file
+threads thread my-thread.md
+
+# Skip confirmation / preview only
+threads thread my-thread.md --yes
+threads thread my-thread.md --dry-run
+```
+
 ## Draft Format
 
 Drafts are markdown files with YAML frontmatter:
@@ -141,10 +157,55 @@ created: 2024-01-15T10:30:00Z
 Your post content goes here. This will be published to Threads.
 ```
 
+Frontmatter fields:
+
 - `title` - Optional title for organizing drafts
-- `image` - Optional image URL to attach
-- `alt` - Alt text for the image
+- `image` - Single image URL to attach
+- `video` - Single video URL to attach
+- `images` - Carousel of 2–20 items; each item is `{ url, alt?, type? }` where
+  `type` is `IMAGE` or `VIDEO` (inferred from the URL when omitted)
+- `alt` - Alt text for a single `image`/`video`
+- `link` - URL to attach as a link preview (text-only posts only)
+- `gif` - GIF attachment id (text-only posts only)
+- `topic` - Topic tag, 1–50 characters, no periods or ampersands
 - `created` - Auto-generated timestamp
+
+Media posts may be **caption-less** — a draft whose body is empty still publishes
+if it carries an `image`, `video`, or `images` carousel. A carousel example:
+
+```markdown
+---
+images:
+  - url: https://example.com/one.jpg
+    alt: First slide
+  - url: https://example.com/clip.mp4
+    type: VIDEO
+---
+
+Optional caption for the carousel.
+```
+
+## Thread Format
+
+A thread is a markdown file with posts separated by `---` on its own line. Each
+post is published in order and chained as a reply to the previous one. A file
+needs at least two posts (use `publish` for single posts).
+
+```markdown
+First post in the thread.
+
+---
+
+Second post.
+
+---
+
+![Alt text](https://example.com/image.jpg) Third post with a leading image.
+```
+
+A post may start with one or more `![alt](url)` image lines; stacked image lines
+become a carousel (up to 20 items), and trailing text on the same line as the
+last image becomes that post's caption.
 
 ## Configuration
 
