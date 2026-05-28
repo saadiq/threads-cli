@@ -1,29 +1,40 @@
-export function displayPreview(content: string, imageUrl?: string): void {
+import type { MediaItem, PostExtras } from "../lib/types";
+
+export function displayPreview(content: string, media: MediaItem[] = [], extras?: PostExtras): void {
   const width = 60;
+  const inner = width - 2;
   const border = "─".repeat(width);
+  const line = (text: string) => console.log(`│ ${text.slice(0, inner).padEnd(inner)} │`);
+  const blank = () => console.log(`│ ${" ".repeat(inner)} │`);
 
   console.log(`┌${border}┐`);
-  console.log(`│ Preview${" ".repeat(width - 8)}│`);
+  line("Preview");
   console.log(`├${border}┤`);
 
-  // Wrap content
-  const lines = content.split("\n");
-  for (const line of lines) {
-    const chunks = chunkString(line, width - 2);
-    for (const chunk of chunks) {
-      console.log(`│ ${chunk.padEnd(width - 2)}│`);
-    }
+  for (const raw of content.split("\n")) {
+    for (const chunk of chunkString(raw, inner)) line(chunk);
   }
 
-  if (imageUrl) {
-    console.log(`│${" ".repeat(width)}│`);
-    console.log(`│ Image: ${imageUrl.slice(0, width - 10).padEnd(width - 2)}│`);
+  if (media.length >= 2) {
+    blank();
+    line(`Carousel (${media.length} items):`);
+    media.forEach((m, k) => {
+      const type = m.type ?? "IMAGE";
+      line(`  [${k + 1}] ${type} ${m.url}${m.alt ? ` (alt: ${m.alt})` : ""}`);
+    });
+  } else if (media.length === 1) {
+    blank();
+    const m = media[0];
+    line(`${(m.type ?? "IMAGE") === "VIDEO" ? "Video" : "Image"}: ${m.url}`);
+    if (m.alt) line(`Alt: ${m.alt}`);
   }
 
-  console.log(`│${" ".repeat(width)}│`);
-  console.log(
-    `│ Characters: ${content.length} / 500${" ".repeat(width - 22 - String(content.length).length)}│`
-  );
+  if (extras?.linkAttachment) line(`Link: ${extras.linkAttachment}`);
+  if (extras?.gif) line(`GIF: ${extras.gif.id}`);
+  if (extras?.topicTag) line(`Topic: ${extras.topicTag}`);
+
+  blank();
+  line(`Characters: ${content.length} / 500`);
   console.log(`└${border}┘`);
 }
 

@@ -4,8 +4,35 @@ import { resolve, basename, join } from "path";
 import { loadConfig, expandPath } from "../lib/config";
 import { parseDraft, validateDraft } from "../lib/drafts";
 import { getValidAccessToken } from "../lib/auth";
-import { ThreadsAPI } from "../lib/api";
+import { ThreadsAPI, detectMediaType } from "../lib/api";
+import { publishMedia } from "../lib/publish-media";
 import { displayPreview, confirm } from "../utils/display";
+import type { DraftFrontmatter, MediaItem, PostExtras } from "../lib/types";
+
+function resolveMedia(fm: DraftFrontmatter): MediaItem[] {
+  if (fm.images && fm.images.length > 0) {
+    return fm.images.map((m) => {
+      const upper = m.type?.toUpperCase();
+      const type = upper === "IMAGE" || upper === "VIDEO" ? upper : detectMediaType(m.url);
+      return { ...m, type };
+    });
+  }
+  if (fm.video) {
+    return [{ url: fm.video, type: "VIDEO", ...(fm.alt ? { alt: fm.alt } : {}) }];
+  }
+  if (fm.image) {
+    return [{ url: fm.image, type: "IMAGE", ...(fm.alt ? { alt: fm.alt } : {}) }];
+  }
+  return [];
+}
+
+function resolveExtras(fm: DraftFrontmatter): PostExtras | undefined {
+  const extras: PostExtras = {};
+  if (fm.topic) extras.topicTag = fm.topic;
+  if (fm.link) extras.linkAttachment = fm.link;
+  if (fm.gif) extras.gif = { id: fm.gif };
+  return extras.topicTag || extras.linkAttachment || extras.gif ? extras : undefined;
+}
 
 export function createPublishCommand(): Command {
   const publish = new Command("publish")
@@ -34,8 +61,25 @@ export function createPublishCommand(): Command {
         process.exit(1);
       }
 
+      const fm = draft.frontmatter;
+      const media = resolveMedia(fm);
+      const extras = resolveExtras(fm);
+
+      if (media.length > 20) {
+        console.error(`Draft has ${media.length} media items; carousels allow at most 20.`);
+        process.exit(1);
+      }
+      if (media.length > 0 && (fm.link || fm.gif)) {
+        console.error("link/gif attachments are only allowed on text-only posts.");
+        process.exit(1);
+      }
+      if (fm.topic && (fm.topic.length > 50 || /[.&]/.test(fm.topic))) {
+        console.error("Topic tag must be 1-50 characters with no periods or ampersands.");
+        process.exit(1);
+      }
+
       // Display preview
-      displayPreview(draft.content, draft.frontmatter.image);
+      displayPreview(draft.content, media, extras);
       console.log();
 
       // Dry run stops here
@@ -64,17 +108,7 @@ export function createPublishCommand(): Command {
 
       // Publish
       try {
-        let postId: string;
-        if (draft.frontmatter.image) {
-          postId = await api.createImagePost(
-            draft.content,
-            draft.frontmatter.image,
-            undefined,
-            draft.frontmatter.alt
-          );
-        } else {
-          postId = await api.createTextPost(draft.content);
-        }
+        const postId = await publishMedia(api, draft.content, media, undefined, extras);
 
         // Get the post URL
         const post = await api.getPost(postId);

@@ -2,13 +2,16 @@ import { Command } from "commander";
 import { existsSync, readFileSync, renameSync, mkdirSync } from "fs";
 import { basename, join, resolve } from "path";
 import { getValidAccessToken } from "../lib/auth";
-import { ThreadsAPI } from "../lib/api";
+import { ThreadsAPI, detectMediaType } from "../lib/api";
+import { publishMedia } from "../lib/publish-media";
 import { loadConfig, expandPath } from "../lib/config";
-import type { ThreadPost } from "../lib/types";
+import type { ThreadPost, MediaItem } from "../lib/types";
 import { countLinks, DRAFT_LINK_LIMIT } from "../lib/drafts";
 import { confirm } from "../utils/display";
 
 const RATE_LIMIT_DELAY_MS = 1000;
+// Leading image markdown: ![alt](url), optionally followed by content on the same line.
+const IMAGE_LINE = /^!\[(.*?)\]\((.*?)\)\s*(.*)$/;
 
 function parseThreadFile(filePath: string): ThreadPost[] {
   const raw = readFileSync(filePath, "utf-8");
@@ -17,17 +20,30 @@ function parseThreadFile(filePath: string): ThreadPost[] {
   const parts = raw.split(/\n---\n/).map((p) => p.trim()).filter(Boolean);
 
   return parts.map((part) => {
-    // Check for simple image syntax: ![alt](url) at start
-    const imageMatch = part.match(/^!\[(.*?)\]\((.*?)\)\n*/);
-    if (imageMatch) {
-      const alt = imageMatch[1].trim();
-      return {
-        content: part.replace(imageMatch[0], "").trim(),
-        image: imageMatch[2],
-        ...(alt ? { alt } : {}),
-      };
+    // Consume contiguous leading image lines; trailing text ends the run.
+    const lines = part.split("\n");
+    const media: MediaItem[] = [];
+    const contentLines: string[] = [];
+    let inMedia = true;
+    for (const lineText of lines) {
+      const match = inMedia ? lineText.match(IMAGE_LINE) : null;
+      if (match) {
+        const url = match[2].trim();
+        const alt = match[1].trim();
+        media.push({ url, type: detectMediaType(url), ...(alt ? { alt } : {}) });
+        const trailing = match[3].trim();
+        if (trailing) {
+          contentLines.push(trailing);
+          inMedia = false;
+        }
+        continue;
+      }
+      inMedia = false;
+      contentLines.push(lineText);
     }
-    return { content: part };
+    const content = contentLines.join("\n").trim();
+
+    return media.length > 0 ? { content, images: media } : { content };
   });
 }
 
@@ -68,16 +84,25 @@ export function createThreadCommand(): Command {
           );
           process.exit(1);
         }
+        const mediaCount = posts[i].images?.length ?? 0;
+        if (mediaCount > 20) {
+          console.error(`Post ${i + 1} has ${mediaCount} media items; carousels allow at most 20.`);
+          process.exit(1);
+        }
       }
 
       // Display preview
       console.log(`\n📝 Thread Preview (${posts.length} posts):\n`);
       posts.forEach((post, i) => {
-        console.log(`--- Post ${i + 1} ${post.image ? "📷" : ""} ---`);
+        const media = post.images ?? [];
+        let badge = "";
+        if (media.length >= 2) badge = `🖼️x${media.length}`;
+        else if (media.length === 1) badge = media[0].type === "VIDEO" ? "🎬" : "📷";
+        console.log(`--- Post ${i + 1} ${badge} ---`);
         console.log(post.content);
-        if (post.image) {
-          console.log(`\n  Image: ${post.image}`);
-        }
+        media.forEach((m, k) => {
+          console.log(`  [${k + 1}] ${m.url}${m.alt ? ` (alt: ${m.alt})` : ""}`);
+        });
         console.log();
       });
 
@@ -114,9 +139,7 @@ export function createThreadCommand(): Command {
           const post = posts[i];
           console.log(`Publishing post ${i + 1}/${posts.length}...`);
 
-          const postId = post.image
-            ? await api.createImagePost(post.content, post.image, previousPostId, post.alt)
-            : await api.createTextPost(post.content, previousPostId);
+          const postId = await publishMedia(api, post.content, post.images ?? [], previousPostId);
 
           const posted = await api.getPost(postId);
           postedUrls.push(posted.url);
