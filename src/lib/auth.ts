@@ -115,13 +115,14 @@ export function isTokenExpired(expiresAt?: string): boolean {
 
 export async function getValidAccessToken(): Promise<{ token: string; userId: string } | null> {
   const config = loadConfig();
-  const { access_token, user_id, expires_at, app_id, app_secret } = config.auth;
+  const { access_token, user_id, expires_at } = config.auth;
 
   if (!access_token || !user_id) {
     return null;
   }
 
-  if (isTokenExpired(expires_at) && app_id && app_secret) {
+  // refreshAccessToken only needs the current token, so don't gate refresh on app credentials.
+  if (isTokenExpired(expires_at)) {
     try {
       const newToken = await refreshAccessToken(access_token);
       config.auth.access_token = newToken;
