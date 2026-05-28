@@ -119,9 +119,12 @@ export class ThreadsAPI {
   }
 
   async getInsights(): Promise<ThreadsInsights> {
-    const profile = await this.getProfile();
-    const followers_count = await this.getFollowerCount().catch(() => null);
-    const demographics = await this.getFollowerDemographics().catch(() => ({}));
+    // These three calls are independent; fetch them in parallel.
+    const [profile, followers_count, demographics] = await Promise.all([
+      this.getProfile(),
+      this.getFollowerCount().catch(() => null),
+      this.getFollowerDemographics().catch(() => ({})),
+    ]);
     const insights: ThreadsInsights = { ...profile, followers_count };
     if (Object.keys(demographics).length > 0) {
       insights.demographics = demographics;
