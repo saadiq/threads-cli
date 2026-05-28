@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { getValidAccessToken } from "../lib/auth";
 import { ThreadsAPI, extractPostId } from "../lib/api";
+import { loadConfig } from "../lib/config";
 import { confirm } from "../utils/display";
 
 async function requireAuth(): Promise<ThreadsAPI> {
@@ -18,11 +19,12 @@ export function createPostsCommand(): Command {
   posts
     .command("list")
     .description("List your recent posts with metrics")
-    .option("-l, --limit <n>", "Number of posts", "25")
+    .option("-l, --limit <n>", "Number of posts (defaults to config default_limit)")
     .option("--since <date>", "Filter posts since date (ISO format)")
     .action(async (options) => {
+      const config = loadConfig();
       const api = await requireAuth();
-      const limit = parseInt(options.limit, 10);
+      const limit = parseInt(options.limit ?? String(config.settings.default_limit), 10);
 
       try {
         let posts = await api.getPosts(limit);
