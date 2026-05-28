@@ -97,7 +97,31 @@ export async function createTextPost(
   return createAndPublish(api, params);
 }
 
-export async function createImagePost(
+// IMAGE and VIDEO posts differ only by the media_type, the URL param name, and the
+// (longer) poll timeout videos need — everything else is identical.
+async function createSingleMediaPost(
+  api: ThreadsAPI,
+  mediaType: "IMAGE" | "VIDEO",
+  url: string,
+  text: string,
+  replyToId?: string,
+  altText?: string,
+  extras?: PostExtras
+): Promise<string> {
+  const urlParam = mediaType === "VIDEO" ? "video_url" : "image_url";
+  const params: Record<string, string> = { media_type: mediaType, [urlParam]: url, text };
+  if (replyToId) {
+    params.reply_to_id = replyToId;
+  }
+  if (altText) {
+    params.alt_text = altText;
+  }
+  applyExtras(params, extras);
+  const waitOptions = mediaType === "VIDEO" ? { timeoutMs: VIDEO_POLL_TIMEOUT_MS } : undefined;
+  return createAndPublish(api, params, waitOptions);
+}
+
+export function createImagePost(
   api: ThreadsAPI,
   text: string,
   imageUrl: string,
@@ -105,18 +129,10 @@ export async function createImagePost(
   altText?: string,
   extras?: PostExtras
 ): Promise<string> {
-  const params: Record<string, string> = { media_type: "IMAGE", image_url: imageUrl, text };
-  if (replyToId) {
-    params.reply_to_id = replyToId;
-  }
-  if (altText) {
-    params.alt_text = altText;
-  }
-  applyExtras(params, extras);
-  return createAndPublish(api, params);
+  return createSingleMediaPost(api, "IMAGE", imageUrl, text, replyToId, altText, extras);
 }
 
-export async function createVideoPost(
+export function createVideoPost(
   api: ThreadsAPI,
   text: string,
   videoUrl: string,
@@ -124,15 +140,7 @@ export async function createVideoPost(
   altText?: string,
   extras?: PostExtras
 ): Promise<string> {
-  const params: Record<string, string> = { media_type: "VIDEO", video_url: videoUrl, text };
-  if (replyToId) {
-    params.reply_to_id = replyToId;
-  }
-  if (altText) {
-    params.alt_text = altText;
-  }
-  applyExtras(params, extras);
-  return createAndPublish(api, params, { timeoutMs: VIDEO_POLL_TIMEOUT_MS });
+  return createSingleMediaPost(api, "VIDEO", videoUrl, text, replyToId, altText, extras);
 }
 
 export async function createCarouselPost(
