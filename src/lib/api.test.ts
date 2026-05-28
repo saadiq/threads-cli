@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { ThreadsAPI, extractPostId } from "./api";
+import { ThreadsAPI, extractPostId, detectMediaType } from "./api";
 
 function mockFetchSequence(responses: Array<Record<string, unknown>>): {
   calls: Array<{ url: string; init?: RequestInit }>;
@@ -132,6 +132,196 @@ describe("ThreadsAPI.createImagePost", () => {
     const createBody = (calls[0].init?.body as URLSearchParams).toString();
     expect(createBody).toContain("reply_to_id=parent123");
     expect(createBody).toContain("alt_text=alt");
+  });
+});
+
+describe("detectMediaType", () => {
+  test("detects video extensions", () => {
+    expect(detectMediaType("https://e/clip.mp4")).toBe("VIDEO");
+    expect(detectMediaType("https://e/clip.MOV")).toBe("VIDEO");
+    expect(detectMediaType("https://e/clip.m4v?token=1")).toBe("VIDEO");
+    expect(detectMediaType("https://cdn/clip.mp4/transcode?sig=x")).toBe("VIDEO");
+  });
+
+  test("defaults to image", () => {
+    expect(detectMediaType("https://e/pic.png")).toBe("IMAGE");
+    expect(detectMediaType("https://e/pic.jpg")).toBe("IMAGE");
+    expect(detectMediaType("https://e/no-extension")).toBe("IMAGE");
+  });
+});
+
+describe("ThreadsAPI.createVideoPost", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("sends media_type=VIDEO and video_url", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    const id = await api.createVideoPost("hi", "https://example.com/clip.mp4", undefined, "a clip");
+    expect(id).toBe("post1");
+    const body = (calls[0].init?.body as URLSearchParams).toString();
+    expect(body).toContain("media_type=VIDEO");
+    expect(body).toContain("video_url=https%3A%2F%2Fexample.com%2Fclip.mp4");
+    expect(body).toContain("alt_text=a+clip");
+    expect(body).not.toContain("image_url");
+  });
+});
+
+describe("ThreadsAPI.createCarouselPost", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("creates children then a CAROUSEL parent and publishes", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "child1" },
+      { status: "FINISHED" },
+      { id: "child2" },
+      { status: "FINISHED" },
+      { id: "carousel1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    const id = await api.createCarouselPost("cap", [
+      { url: "https://e/1.png", alt: "one" },
+      { url: "https://e/2.png" },
+    ]);
+    expect(id).toBe("post1");
+
+    const child1 = (calls[0].init?.body as URLSearchParams).toString();
+    expect(child1).toContain("is_carousel_item=true");
+    expect(child1).toContain("media_type=IMAGE");
+    expect(child1).toContain("image_url=https%3A%2F%2Fe%2F1.png");
+    expect(child1).toContain("alt_text=one");
+
+    const child2 = (calls[2].init?.body as URLSearchParams).toString();
+    expect(child2).toContain("is_carousel_item=true");
+    expect(child2).not.toContain("alt_text");
+
+    const parent = (calls[4].init?.body as URLSearchParams).toString();
+    expect(parent).toContain("media_type=CAROUSEL");
+    expect(parent).toContain("children=child1%2Cchild2");
+    expect(parent).toContain("text=cap");
+    expect(parent).not.toContain("is_carousel_item");
+  });
+
+  test("sends video children with video_url", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "child1" },
+      { status: "FINISHED" },
+      { id: "child2" },
+      { status: "FINISHED" },
+      { id: "carousel1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createCarouselPost("cap", [
+      { url: "https://e/1.png" },
+      { url: "https://e/2.mp4" },
+    ]);
+    const videoChild = (calls[2].init?.body as URLSearchParams).toString();
+    expect(videoChild).toContain("media_type=VIDEO");
+    expect(videoChild).toContain("video_url=https%3A%2F%2Fe%2F2.mp4");
+    expect(videoChild).not.toContain("image_url");
+  });
+
+  test("puts reply_to_id on the parent only", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "child1" },
+      { status: "FINISHED" },
+      { id: "child2" },
+      { status: "FINISHED" },
+      { id: "carousel1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createCarouselPost("cap", [{ url: "https://e/1.png" }, { url: "https://e/2.png" }], "parent123");
+    expect((calls[0].init?.body as URLSearchParams).toString()).not.toContain("reply_to_id");
+    expect((calls[2].init?.body as URLSearchParams).toString()).not.toContain("reply_to_id");
+    expect((calls[4].init?.body as URLSearchParams).toString()).toContain("reply_to_id=parent123");
+  });
+
+  test("throws before any request when fewer than 2 items", async () => {
+    const spy = spyOn(globalThis, "fetch");
+    const api = new ThreadsAPI("t", "u");
+    await expect(api.createCarouselPost("cap", [{ url: "https://e/1.png" }])).rejects.toThrow(
+      "Carousel requires 2-20 items (got 1)"
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("throws when more than 20 items", async () => {
+    const spy = spyOn(globalThis, "fetch");
+    const api = new ThreadsAPI("t", "u");
+    const items = Array.from({ length: 21 }, (_, i) => ({ url: `https://e/${i}.png` }));
+    await expect(api.createCarouselPost("cap", items)).rejects.toThrow(
+      "Carousel requires 2-20 items (got 21)"
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("surfaces a child container error and stops before the parent", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "child1" },
+      { status: "ERROR", error_message: "bad media url" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await expect(
+      api.createCarouselPost("cap", [{ url: "https://e/1.png" }, { url: "https://e/2.png" }])
+    ).rejects.toThrow("Carousel item 1 (https://e/1.png) failed: Threads container ERROR: bad media url");
+    expect(calls.length).toBe(2);
+  });
+});
+
+describe("ThreadsAPI attachments", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  test("text post sends topic_tag, link_attachment and gif_attachment", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createTextPost("hi", undefined, {
+      topicTag: "Coffee",
+      linkAttachment: "https://example.com",
+      gif: { id: "abc123" },
+    });
+    const body = (calls[0].init?.body as URLSearchParams).toString();
+    expect(body).toContain("topic_tag=Coffee");
+    expect(body).toContain("link_attachment=https%3A%2F%2Fexample.com");
+    expect(body).toContain("gif_attachment=");
+    const gif = new URLSearchParams((calls[0].init?.body as URLSearchParams).toString()).get("gif_attachment");
+    expect(JSON.parse(gif!)).toEqual({ gif_id: "abc123", provider: "giphy" });
+  });
+
+  test("image post sends topic_tag but not link/gif attachments", async () => {
+    const { calls } = mockFetchSequence([
+      { id: "container1" },
+      { status: "FINISHED" },
+      { id: "post1" },
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    await api.createImagePost("hi", "https://e/1.png", undefined, undefined, {
+      topicTag: "Coffee",
+      linkAttachment: "https://example.com",
+      gif: { id: "abc123" },
+    });
+    const body = (calls[0].init?.body as URLSearchParams).toString();
+    expect(body).toContain("topic_tag=Coffee");
+    expect(body).not.toContain("link_attachment");
+    expect(body).not.toContain("gif_attachment");
   });
 });
 

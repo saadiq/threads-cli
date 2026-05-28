@@ -23,10 +23,27 @@ export interface Config {
   settings: SettingsConfig;
 }
 
+export interface MediaItem {
+  url: string;
+  alt?: string;
+  type?: "IMAGE" | "VIDEO";
+}
+
+export interface PostExtras {
+  topicTag?: string;
+  linkAttachment?: string;
+  gif?: { id: string; provider?: string };
+}
+
 export interface DraftFrontmatter {
   title?: string;
   image?: string;
   alt?: string;
+  video?: string;
+  images?: MediaItem[];
+  link?: string;
+  gif?: string;
+  topic?: string;
   created?: string;
 }
 
@@ -77,6 +94,5 @@ export interface ThreadsInsights extends ThreadsProfile {
 
 export interface ThreadPost {
   content: string;
-  image?: string;
-  alt?: string;
+  images?: MediaItem[];
 }

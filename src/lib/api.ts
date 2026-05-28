@@ -1,12 +1,19 @@
-import type { ThreadsPost, ThreadsProfile, ThreadsInsights, PostMetrics } from "./types";
+import type { ThreadsPost, ThreadsProfile, ThreadsInsights, PostMetrics, MediaItem, PostExtras } from "./types";
 
 const BASE_URL = "https://graph.threads.net/v1.0";
 const CONTAINER_POLL_TIMEOUT_MS = 60_000;
+const VIDEO_POLL_TIMEOUT_MS = 300_000;
 const CONTAINER_POLL_INTERVAL_MS = 2_000;
+const CAROUSEL_MIN_ITEMS = 2;
+const CAROUSEL_MAX_ITEMS = 20;
 
 export function extractPostId(idOrUrl: string): string {
   const urlMatch = idOrUrl.match(/threads\.net\/@[\w.]+\/post\/(\w+)/);
   return urlMatch ? urlMatch[1] : idOrUrl;
+}
+
+export function detectMediaType(url: string): "IMAGE" | "VIDEO" {
+  return /\.(mp4|mov|m4v)([?#/]|$)/i.test(url) ? "VIDEO" : "IMAGE";
 }
 
 export class ThreadsAPI {
@@ -149,22 +156,53 @@ export class ThreadsAPI {
     }
   }
 
-  private async createAndPublish(params: Record<string, string>): Promise<string> {
-    const containerData = await this.fetch<{ id: string }>(`/${this.userId}/threads`, {
+  private async createContainer(params: Record<string, string>): Promise<string> {
+    const data = await this.fetch<{ id: string }>(`/${this.userId}/threads`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(params),
     });
+    return data.id;
+  }
 
-    await this.waitForContainer(containerData.id);
-
-    const publishData = await this.fetch<{ id: string }>(`/${this.userId}/threads_publish`, {
+  private async publishContainer(creationId: string): Promise<string> {
+    const data = await this.fetch<{ id: string }>(`/${this.userId}/threads_publish`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ creation_id: containerData.id }),
+      body: new URLSearchParams({ creation_id: creationId }),
     });
+    return data.id;
+  }
 
-    return publishData.id;
+  private async createAndPublish(
+    params: Record<string, string>,
+    waitOptions?: { timeoutMs?: number; intervalMs?: number }
+  ): Promise<string> {
+    const containerId = await this.createContainer(params);
+    await this.waitForContainer(containerId, waitOptions);
+    return this.publishContainer(containerId);
+  }
+
+  private applyExtras(
+    params: Record<string, string>,
+    extras?: PostExtras,
+    allowTextOnly = false
+  ): void {
+    if (!extras) return;
+    if (extras.topicTag) {
+      params.topic_tag = extras.topicTag;
+    }
+    if (allowTextOnly) {
+      if (extras.linkAttachment) {
+        params.link_attachment = extras.linkAttachment;
+      }
+      if (extras.gif) {
+        params.gif_attachment = JSON.stringify({
+          gif_id: extras.gif.id,
+          provider: extras.gif.provider ?? "giphy",
+        });
+      }
+    }
   }
 
   async deletePost(postId: string): Promise<void> {
@@ -172,11 +210,12 @@ export class ThreadsAPI {
     await this.fetch<unknown>(`/${id}`, { method: "DELETE" });
   }
 
-  async createTextPost(text: string, replyToId?: string): Promise<string> {
+  async createTextPost(text: string, replyToId?: string, extras?: PostExtras): Promise<string> {
     const params: Record<string, string> = { media_type: "TEXT", text };
     if (replyToId) {
       params.reply_to_id = replyToId;
     }
+    this.applyExtras(params, extras, true);
     return this.createAndPublish(params);
   }
 
@@ -184,7 +223,8 @@ export class ThreadsAPI {
     text: string,
     imageUrl: string,
     replyToId?: string,
-    altText?: string
+    altText?: string,
+    extras?: PostExtras
   ): Promise<string> {
     const params: Record<string, string> = { media_type: "IMAGE", image_url: imageUrl, text };
     if (replyToId) {
@@ -193,6 +233,78 @@ export class ThreadsAPI {
     if (altText) {
       params.alt_text = altText;
     }
+    this.applyExtras(params, extras);
+    return this.createAndPublish(params);
+  }
+
+  async createVideoPost(
+    text: string,
+    videoUrl: string,
+    replyToId?: string,
+    altText?: string,
+    extras?: PostExtras
+  ): Promise<string> {
+    const params: Record<string, string> = { media_type: "VIDEO", video_url: videoUrl, text };
+    if (replyToId) {
+      params.reply_to_id = replyToId;
+    }
+    if (altText) {
+      params.alt_text = altText;
+    }
+    this.applyExtras(params, extras);
+    return this.createAndPublish(params, { timeoutMs: VIDEO_POLL_TIMEOUT_MS });
+  }
+
+  async createCarouselPost(
+    text: string,
+    items: MediaItem[],
+    replyToId?: string,
+    extras?: PostExtras
+  ): Promise<string> {
+    if (items.length < CAROUSEL_MIN_ITEMS || items.length > CAROUSEL_MAX_ITEMS) {
+      throw new Error(
+        `Carousel requires ${CAROUSEL_MIN_ITEMS}-${CAROUSEL_MAX_ITEMS} items (got ${items.length})`
+      );
+    }
+
+    const childIds: string[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const type = item.type ?? detectMediaType(item.url);
+      const childParams: Record<string, string> = {
+        media_type: type,
+        is_carousel_item: "true",
+      };
+      if (type === "VIDEO") {
+        childParams.video_url = item.url;
+      } else {
+        childParams.image_url = item.url;
+      }
+      if (item.alt) {
+        childParams.alt_text = item.alt;
+      }
+
+      const childId = await this.createContainer(childParams);
+      try {
+        await this.waitForContainer(
+          childId,
+          type === "VIDEO" ? { timeoutMs: VIDEO_POLL_TIMEOUT_MS } : undefined
+        );
+      } catch (error) {
+        throw new Error(`Carousel item ${i + 1} (${item.url}) failed: ${(error as Error).message}`);
+      }
+      childIds.push(childId);
+    }
+
+    const params: Record<string, string> = {
+      media_type: "CAROUSEL",
+      children: childIds.join(","),
+      text,
+    };
+    if (replyToId) {
+      params.reply_to_id = replyToId;
+    }
+    this.applyExtras(params, extras);
     return this.createAndPublish(params);
   }
 }
