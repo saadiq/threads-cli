@@ -173,7 +173,6 @@ export function createAuthCommand(): Command {
     .action(() => {
       const config = loadConfig();
       delete config.auth.access_token;
-      delete config.auth.refresh_token;
       delete config.auth.user_id;
       delete config.auth.expires_at;
       saveConfig(config);

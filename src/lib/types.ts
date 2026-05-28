@@ -2,7 +2,6 @@ export interface AuthConfig {
   app_id: string;
   app_secret: string;
   access_token?: string;
-  refresh_token?: string;
   expires_at?: string;
   user_id?: string;
 }
