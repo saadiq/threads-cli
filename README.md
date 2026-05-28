@@ -103,6 +103,10 @@ threads posts get "https://threads.net/@user/post/abc123"
 
 # Get replies to a post
 threads posts replies <post-id>
+
+# Delete a post by ID or URL (prompts for confirmation; --yes to skip)
+threads posts delete <post-id>
+threads posts delete <post-id> --yes
 ```
 
 ### Drafts
@@ -141,6 +145,22 @@ threads thread my-thread.md
 threads thread my-thread.md --yes
 threads thread my-thread.md --dry-run
 ```
+
+### Config
+
+```bash
+# Show the config file, drafts, and archive paths
+threads config path
+
+# Set a configuration value
+threads config set drafts_path ~/threads/drafts
+threads config set archive_path ~/threads/archive
+threads config set default_limit 50
+threads config set archive_after_publish false
+```
+
+Settable keys: `drafts_path`, `archive_path`, `default_limit`,
+`archive_after_publish`.
 
 ## Draft Format
 
@@ -221,8 +241,8 @@ Config is stored at `~/.threads-cli/config.json`:
     "expires_at": "2024-03-15T00:00:00.000Z"
   },
   "paths": {
-    "drafts": "~/threads/drafts",
-    "archive": "~/threads/archive"
+    "drafts": "~/.threads-cli/drafts",
+    "archive": "~/.threads-cli/archive"
   },
   "settings": {
     "archive_after_publish": true,
