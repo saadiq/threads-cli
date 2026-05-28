@@ -10,6 +10,9 @@ const BASE_URL = "https://graph.threads.net/v1.0";
 // Cap concurrent per-post metric requests so a large `--since` range can't burst hundreds of
 // calls at once (which would trip Threads rate limits and silently drop metrics).
 const METRICS_CONCURRENCY = 8;
+// When paging through `--since`, request the API's max page size to minimize the (necessarily
+// sequential) round-trips. `--limit` only sizes a single page, so it's not used in this mode.
+const SINCE_PAGE_SIZE = 100;
 
 // Runs fn over items with at most `limit` in flight at once, preserving input order.
 async function mapWithConcurrency<T, R>(
@@ -131,11 +134,12 @@ export class ThreadsAPI {
   async getPosts(options: { limit?: number; since?: string } = {}): Promise<ThreadsPost[]> {
     const { limit = 25, since } = options;
     const fields = "id,text,timestamp,media_type,media_url,permalink";
+    const pageSize = since ? SINCE_PAGE_SIZE : limit;
 
     const raw: any[] = [];
     let after: string | undefined;
     do {
-      const params = new URLSearchParams({ fields, limit: String(limit) });
+      const params = new URLSearchParams({ fields, limit: String(pageSize) });
       if (since) params.set("since", since);
       if (after) params.set("after", after);
 

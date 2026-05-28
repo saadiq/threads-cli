@@ -453,6 +453,7 @@ describe("ThreadsAPI.getPosts", () => {
     const posts = await api.getPosts({ limit: 1, since: "2024-01-01" });
     const pageUrls = calls.map((c) => c.url).filter((u) => u.includes("/threads?"));
     expect(pageUrls[0]).toContain("since=2024-01-01");
+    expect(pageUrls[0]).toContain("limit=100"); // since path uses max page size, not --limit
     expect(pageUrls[1]).toContain("after=CURSOR2");
     expect(posts.map((p) => p.id)).toEqual(["p1", "p2"]);
   });
