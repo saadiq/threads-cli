@@ -43,6 +43,19 @@ export function detectMediaType(url: string): "IMAGE" | "VIDEO" {
 
 type Demographics = NonNullable<ThreadsInsights["demographics"]>;
 
+// Maps a raw Graph API post object (using its field names) to our ThreadsPost shape.
+function toThreadsPost(raw: any, metrics?: PostMetrics): ThreadsPost {
+  return {
+    id: raw.id,
+    text: raw.text || "",
+    created_at: raw.timestamp,
+    url: raw.permalink,
+    media_type: raw.media_type,
+    media_url: raw.media_url,
+    metrics,
+  };
+}
+
 // follower_demographics responses nest the data under total_value.breakdowns[].results[],
 // where each result pairs a dimension key (e.g. "US") with a count.
 function parseDemographicBreakdown(data: any): Record<string, number> {
@@ -156,15 +169,7 @@ export class ThreadsAPI {
     const selected = since ? raw : raw.slice(0, limit);
     return mapWithConcurrency(selected, METRICS_CONCURRENCY, async (post) => {
       const metrics = await this.getPostMetrics(post.id).catch(() => undefined);
-      return {
-        id: post.id,
-        text: post.text || "",
-        created_at: post.timestamp,
-        url: post.permalink,
-        media_type: post.media_type,
-        media_url: post.media_url,
-        metrics,
-      };
+      return toThreadsPost(post, metrics);
     });
   }
 
@@ -174,15 +179,7 @@ export class ThreadsAPI {
     const data = await this.request<any>(`/${id}?fields=${fields}`);
     const metrics = await this.getPostMetrics(id).catch(() => undefined);
 
-    return {
-      id: data.id,
-      text: data.text || "",
-      created_at: data.timestamp,
-      url: data.permalink,
-      media_type: data.media_type,
-      media_url: data.media_url,
-      metrics,
-    };
+    return toThreadsPost(data, metrics);
   }
 
   async getPostMetrics(postId: string): Promise<PostMetrics> {
