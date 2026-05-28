@@ -486,6 +486,31 @@ describe("ThreadsAPI.getPosts", () => {
     expect(maxInFlight).toBeGreaterThan(1); // genuinely parallel
     expect(maxInFlight).toBeLessThanOrEqual(8); // but capped
   });
+
+  test("since paging terminates when the API keeps returning the same cursor", async () => {
+    let pageRequests = 0;
+    const impl = (async (url: string) => {
+      if (typeof url === "string" && url.includes("/threads?")) {
+        pageRequests++;
+        // Always hand back the same `after` — a misbehaving cursor that never clears.
+        return new Response(
+          JSON.stringify({
+            data: [{ id: `p${pageRequests}`, timestamp: "2024-02-01", permalink: "u" }],
+            paging: { cursors: { after: "STUCK" } },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(JSON.stringify({ data: [] }), { status: 200 }); // metrics
+    }) as unknown as typeof fetch;
+    spyOn(globalThis, "fetch").mockImplementation(impl);
+
+    const api = new ThreadsAPI("t", "user1");
+    const posts = await api.getPosts({ limit: 1, since: "2024-01-01" });
+    // Stops once the cursor repeats instead of looping forever.
+    expect(pageRequests).toBe(2);
+    expect(posts).toHaveLength(2);
+  });
 });
 
 describe("ThreadsAPI.getFollowerDemographics", () => {

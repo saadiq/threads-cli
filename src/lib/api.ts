@@ -13,6 +13,10 @@ const METRICS_CONCURRENCY = 8;
 // When paging through `--since`, request the API's max page size to minimize the (necessarily
 // sequential) round-trips. `--limit` only sizes a single page, so it's not used in this mode.
 const SINCE_PAGE_SIZE = 100;
+// Hard ceiling on `--since` pagination. Termination normally comes from the API dropping the
+// `after` cursor on the last page; this is defensive insurance against a cursor that never
+// clears (or repeats), which would otherwise loop forever fanning out a metric request per post.
+const SINCE_MAX_PAGES = 100;
 
 // Runs fn over items with at most `limit` in flight at once, preserving input order.
 async function mapWithConcurrency<T, R>(
@@ -154,6 +158,7 @@ export class ThreadsAPI {
 
     const raw: any[] = [];
     let after: string | undefined;
+    let pages = 0;
     do {
       const params = new URLSearchParams({ fields, limit: String(pageSize) });
       if (since) params.set("since", since);
@@ -163,7 +168,9 @@ export class ThreadsAPI {
       const page = data.data || [];
       raw.push(...page);
       // Only paginate when filtering by date; otherwise a single page honors `limit`.
-      after = since && page.length > 0 ? data.paging?.cursors?.after : undefined;
+      const nextAfter = since && page.length > 0 ? data.paging?.cursors?.after : undefined;
+      // Stop if the API stops advancing the cursor (or repeats it) or we hit the page ceiling.
+      after = nextAfter && nextAfter !== after && ++pages < SINCE_MAX_PAGES ? nextAfter : undefined;
     } while (after);
 
     const selected = since ? raw : raw.slice(0, limit);
