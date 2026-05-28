@@ -7,6 +7,27 @@ import {
 } from "./api-publish";
 
 const BASE_URL = "https://graph.threads.net/v1.0";
+// Cap concurrent per-post metric requests so a large `--since` range can't burst hundreds of
+// calls at once (which would trip Threads rate limits and silently drop metrics).
+const METRICS_CONCURRENCY = 8;
+
+// Runs fn over items with at most `limit` in flight at once, preserving input order.
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 export function extractPostId(idOrUrl: string): string {
   const urlMatch = idOrUrl.match(/threads\.net\/@[\w.]+\/post\/(\w+)/);
@@ -126,20 +147,18 @@ export class ThreadsAPI {
     } while (after);
 
     const selected = since ? raw : raw.slice(0, limit);
-    return Promise.all(
-      selected.map(async (post) => {
-        const metrics = await this.getPostMetrics(post.id).catch(() => undefined);
-        return {
-          id: post.id,
-          text: post.text || "",
-          created_at: post.timestamp,
-          url: post.permalink,
-          media_type: post.media_type,
-          media_url: post.media_url,
-          metrics,
-        };
-      })
-    );
+    return mapWithConcurrency(selected, METRICS_CONCURRENCY, async (post) => {
+      const metrics = await this.getPostMetrics(post.id).catch(() => undefined);
+      return {
+        id: post.id,
+        text: post.text || "",
+        created_at: post.timestamp,
+        url: post.permalink,
+        media_type: post.media_type,
+        media_url: post.media_url,
+        metrics,
+      };
+    });
   }
 
   async getPost(postId: string): Promise<ThreadsPost> {

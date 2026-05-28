@@ -456,6 +456,35 @@ describe("ThreadsAPI.getPosts", () => {
     expect(pageUrls[1]).toContain("after=CURSOR2");
     expect(posts.map((p) => p.id)).toEqual(["p1", "p2"]);
   });
+
+  test("bounds concurrent metric requests (no unbounded fan-out)", async () => {
+    const count = 30;
+    const page = Array.from({ length: count }, (_, i) => ({
+      id: `p${i}`,
+      timestamp: "2024-01-01",
+      permalink: `u${i}`,
+    }));
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const impl = (async (url: string) => {
+      if (typeof url === "string" && url.includes("/threads?")) {
+        return new Response(JSON.stringify({ data: page }), { status: 200 });
+      }
+      // a metrics request — track peak concurrency while it "runs"
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight--;
+      return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    spyOn(globalThis, "fetch").mockImplementation(impl);
+
+    const api = new ThreadsAPI("t", "user1");
+    const posts = await api.getPosts({ limit: count });
+    expect(posts).toHaveLength(count);
+    expect(maxInFlight).toBeGreaterThan(1); // genuinely parallel
+    expect(maxInFlight).toBeLessThanOrEqual(8); // but capped
+  });
 });
 
 describe("ThreadsAPI.getFollowerDemographics", () => {
