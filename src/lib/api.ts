@@ -17,6 +17,20 @@ export function detectMediaType(url: string): "IMAGE" | "VIDEO" {
   return /\.(mp4|mov|m4v)([?#/]|$)/i.test(url) ? "VIDEO" : "IMAGE";
 }
 
+type Demographics = NonNullable<ThreadsInsights["demographics"]>;
+
+// follower_demographics responses nest the data under total_value.breakdowns[].results[],
+// where each result pairs a dimension key (e.g. "US") with a count.
+function parseDemographicBreakdown(data: any): Record<string, number> {
+  const results = data?.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? [];
+  const out: Record<string, number> = {};
+  for (const r of results) {
+    const key = r?.dimension_values?.[0];
+    if (typeof key === "string") out[key] = r?.value ?? 0;
+  }
+  return out;
+}
+
 export class ThreadsAPI {
   constructor(
     private accessToken: string,
@@ -54,10 +68,41 @@ export class ThreadsAPI {
     return metric?.total_value?.value || 0;
   }
 
+  // Fetches follower demographics. Threads requires one breakdown per request and 100+
+  // followers; each breakdown degrades to omitted on error (too few followers / no linked IG).
+  async getFollowerDemographics(): Promise<Demographics> {
+    const breakdowns: Array<{ param: string; key: keyof Demographics }> = [
+      { param: "country", key: "countries" },
+      { param: "city", key: "cities" },
+      { param: "age", key: "age" },
+      { param: "gender", key: "gender" },
+    ];
+
+    const demographics: Demographics = {};
+    await Promise.all(
+      breakdowns.map(async ({ param, key }) => {
+        const parsed = await this.request<any>(
+          `/me/threads_insights?metric=follower_demographics&breakdown=${param}`
+        )
+          .then(parseDemographicBreakdown)
+          .catch(() => undefined);
+        if (parsed && Object.keys(parsed).length > 0) {
+          demographics[key] = parsed;
+        }
+      })
+    );
+    return demographics;
+  }
+
   async getInsights(): Promise<ThreadsInsights> {
     const profile = await this.getProfile();
     const followers_count = await this.getFollowerCount().catch(() => null);
-    return { ...profile, followers_count };
+    const demographics = await this.getFollowerDemographics().catch(() => ({}));
+    const insights: ThreadsInsights = { ...profile, followers_count };
+    if (Object.keys(demographics).length > 0) {
+      insights.demographics = demographics;
+    }
+    return insights;
   }
 
   async getPosts(limit: number = 25): Promise<ThreadsPost[]> {

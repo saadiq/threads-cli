@@ -413,3 +413,46 @@ describe("ThreadsAPI.deletePost", () => {
     expect(calls[0].url).not.toContain("threads.net%2F");
   });
 });
+
+describe("ThreadsAPI.getFollowerDemographics", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  const breakdown = (key: string, value: number) => ({
+    data: [{ total_value: { breakdowns: [{ results: [{ dimension_values: [key], value }] }] } }],
+  });
+
+  test("requests each breakdown and maps results to demographics", async () => {
+    // Parallel requests fire in array order: country, city, age, gender.
+    const { calls } = mockFetchSequence([
+      breakdown("US", 100),
+      breakdown("Brooklyn", 40),
+      breakdown("25-34", 60),
+      breakdown("F", 55),
+    ]);
+    const api = new ThreadsAPI("t", "u");
+    const demographics = await api.getFollowerDemographics();
+    expect(calls[0].url).toContain("metric=follower_demographics&breakdown=country");
+    expect(demographics).toEqual({
+      countries: { US: 100 },
+      cities: { Brooklyn: 40 },
+      age: { "25-34": 60 },
+      gender: { F: 55 },
+    });
+  });
+
+  test("omits breakdowns that error (e.g. <100 followers)", async () => {
+    const impl = (async (url: string) => {
+      if (typeof url === "string" && url.includes("breakdown=country")) {
+        return new Response(JSON.stringify(breakdown("US", 100)), { status: 200 });
+      }
+      return new Response("too few followers", { status: 400 });
+    }) as unknown as typeof fetch;
+    spyOn(globalThis, "fetch").mockImplementation(impl);
+
+    const api = new ThreadsAPI("t", "u");
+    const demographics = await api.getFollowerDemographics();
+    expect(demographics).toEqual({ countries: { US: 100 } });
+  });
+});
