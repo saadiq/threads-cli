@@ -105,26 +105,41 @@ export class ThreadsAPI {
     return insights;
   }
 
-  async getPosts(limit: number = 25): Promise<ThreadsPost[]> {
+  // With `since` (ISO date), pages through the API's cursors to gather every matching post;
+  // without it, returns a single page of up to `limit`. Metrics are fetched concurrently.
+  async getPosts(options: { limit?: number; since?: string } = {}): Promise<ThreadsPost[]> {
+    const { limit = 25, since } = options;
     const fields = "id,text,timestamp,media_type,media_url,permalink";
-    const data = await this.request<any>(
-      `/${this.userId}/threads?fields=${fields}&limit=${limit}`
-    );
 
-    const posts: ThreadsPost[] = [];
-    for (const post of data.data || []) {
-      const metrics = await this.getPostMetrics(post.id).catch(() => undefined);
-      posts.push({
-        id: post.id,
-        text: post.text || "",
-        created_at: post.timestamp,
-        url: post.permalink,
-        media_type: post.media_type,
-        media_url: post.media_url,
-        metrics,
-      });
-    }
-    return posts;
+    const raw: any[] = [];
+    let after: string | undefined;
+    do {
+      const params = new URLSearchParams({ fields, limit: String(limit) });
+      if (since) params.set("since", since);
+      if (after) params.set("after", after);
+
+      const data = await this.request<any>(`/${this.userId}/threads?${params}`);
+      const page = data.data || [];
+      raw.push(...page);
+      // Only paginate when filtering by date; otherwise a single page honors `limit`.
+      after = since && page.length > 0 ? data.paging?.cursors?.after : undefined;
+    } while (after);
+
+    const selected = since ? raw : raw.slice(0, limit);
+    return Promise.all(
+      selected.map(async (post) => {
+        const metrics = await this.getPostMetrics(post.id).catch(() => undefined);
+        return {
+          id: post.id,
+          text: post.text || "",
+          created_at: post.timestamp,
+          url: post.permalink,
+          media_type: post.media_type,
+          media_url: post.media_url,
+          metrics,
+        };
+      })
+    );
   }
 
   async getPost(postId: string): Promise<ThreadsPost> {

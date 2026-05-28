@@ -414,6 +414,50 @@ describe("ThreadsAPI.deletePost", () => {
   });
 });
 
+describe("ThreadsAPI.getPosts", () => {
+  afterEach(() => {
+    spyOn(globalThis, "fetch").mockRestore();
+  });
+
+  const noMetrics = { data: [] };
+
+  test("fetches a single page (no metrics) without since", async () => {
+    const { calls } = mockFetchSequence([
+      { data: [{ id: "p1", timestamp: "2024-01-01", permalink: "u1" }] },
+      noMetrics, // metrics for p1
+    ]);
+    const api = new ThreadsAPI("t", "user1");
+    const posts = await api.getPosts({ limit: 5 });
+    expect(calls[0].url).toContain("/user1/threads?");
+    expect(calls[0].url).toContain("limit=5");
+    expect(calls[0].url).not.toContain("since=");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].id).toBe("p1");
+  });
+
+  test("passes since and follows after cursors across pages", async () => {
+    // Both pages are fetched first (the paging loop completes), then metrics in parallel.
+    const { calls } = mockFetchSequence([
+      {
+        data: [{ id: "p1", timestamp: "2024-02-01", permalink: "u1" }],
+        paging: { cursors: { after: "CURSOR2" } },
+      },
+      {
+        data: [{ id: "p2", timestamp: "2024-02-02", permalink: "u2" }],
+        paging: { cursors: {} }, // no after -> stop
+      },
+      noMetrics, // metrics p1
+      noMetrics, // metrics p2
+    ]);
+    const api = new ThreadsAPI("t", "user1");
+    const posts = await api.getPosts({ limit: 1, since: "2024-01-01" });
+    const pageUrls = calls.map((c) => c.url).filter((u) => u.includes("/threads?"));
+    expect(pageUrls[0]).toContain("since=2024-01-01");
+    expect(pageUrls[1]).toContain("after=CURSOR2");
+    expect(posts.map((p) => p.id)).toEqual(["p1", "p2"]);
+  });
+});
+
 describe("ThreadsAPI.getFollowerDemographics", () => {
   afterEach(() => {
     spyOn(globalThis, "fetch").mockRestore();

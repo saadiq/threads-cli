@@ -19,21 +19,15 @@ export function createPostsCommand(): Command {
   posts
     .command("list")
     .description("List your recent posts with metrics")
-    .option("-l, --limit <n>", "Number of posts (defaults to config default_limit)")
-    .option("--since <date>", "Filter posts since date (ISO format)")
+    .option("-l, --limit <n>", "Posts per page (defaults to config default_limit)")
+    .option("--since <date>", "Fetch all posts since date (ISO format), paging as needed")
     .action(async (options) => {
       const config = loadConfig();
       const api = await requireAuth();
       const limit = parseInt(options.limit ?? String(config.settings.default_limit), 10);
 
       try {
-        let posts = await api.getPosts(limit);
-
-        if (options.since) {
-          const sinceDate = new Date(options.since);
-          posts = posts.filter((p) => new Date(p.created_at) >= sinceDate);
-        }
-
+        const posts = await api.getPosts({ limit, since: options.since });
         console.log(JSON.stringify(posts, null, 2));
       } catch (error) {
         console.error("Failed to fetch posts:", error);
