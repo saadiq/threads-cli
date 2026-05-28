@@ -45,10 +45,10 @@ export function listDrafts(draftsDir: string): Draft[] {
   return files.map((f) => parseDraft(join(draftsDir, f)));
 }
 
-export function validateDraft(draft: Draft): { valid: boolean; errors: string[] } {
+export function validateDraft(draft: Draft, hasMedia = false): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
-  if (!draft.content || draft.content.trim().length === 0) {
+  if (!hasMedia && (!draft.content || draft.content.trim().length === 0)) {
     errors.push("Draft has no content");
   }
 

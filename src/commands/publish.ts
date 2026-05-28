@@ -53,17 +53,17 @@ export function createPublishCommand(): Command {
 
       // Parse draft
       const draft = parseDraft(filePath);
-      const { valid, errors } = validateDraft(draft);
+      const fm = draft.frontmatter;
+      const media = resolveMedia(fm);
+      const extras = resolveExtras(fm);
+
+      const { valid, errors } = validateDraft(draft, media.length > 0);
 
       if (!valid) {
         console.error("Validation errors:");
         errors.forEach((e) => console.error(`  - ${e}`));
         process.exit(1);
       }
-
-      const fm = draft.frontmatter;
-      const media = resolveMedia(fm);
-      const extras = resolveExtras(fm);
 
       if (media.length > 20) {
         console.error(`Draft has ${media.length} media items; carousels allow at most 20.`);

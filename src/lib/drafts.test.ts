@@ -92,6 +92,13 @@ describe("validateDraft", () => {
     expect(result.errors).toContain("Draft has no content");
   });
 
+  test("accepts empty content when media is present", () => {
+    const draft = createTestDraft("");
+    const result = validateDraft(draft, true);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
   test("returns error for content over character limit", () => {
     const longContent = "a".repeat(DRAFT_CHAR_LIMIT + 1);
     const draft = createTestDraft(longContent);
