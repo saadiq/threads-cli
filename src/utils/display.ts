@@ -51,12 +51,24 @@ export async function confirm(message: string): Promise<boolean> {
   process.stdout.write(`${message} [y/N] `);
 
   const response = await new Promise<string>((resolve) => {
-    let data = "";
     process.stdin.setRawMode?.(false);
-    process.stdin.once("data", (chunk) => {
-      data = chunk.toString().trim().toLowerCase();
-      resolve(data);
-    });
+
+    const onData = (chunk: Buffer) => {
+      cleanup();
+      resolve(chunk.toString().trim().toLowerCase());
+    };
+    // Piped or closed stdin emits "end" without data — treat as "no" instead of hanging.
+    const onEnd = () => {
+      cleanup();
+      resolve("");
+    };
+    const cleanup = () => {
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+    };
+
+    process.stdin.once("data", onData);
+    process.stdin.once("end", onEnd);
   });
 
   return response === "y" || response === "yes";
