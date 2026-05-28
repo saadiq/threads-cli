@@ -19,7 +19,7 @@ export function createPostsCommand(): Command {
   posts
     .command("list")
     .description("List your recent posts with metrics")
-    .option("-l, --limit <n>", "Posts per page (defaults to config default_limit)")
+    .option("-l, --limit <n>", "Posts per page (defaults to config default_limit; ignored with --since)")
     .option("--since <date>", "Fetch all posts since date (ISO format), paging as needed")
     .action(async (options) => {
       const config = loadConfig();
