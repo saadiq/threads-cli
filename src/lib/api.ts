@@ -1,11 +1,12 @@
 import type { ThreadsPost, ThreadsProfile, ThreadsInsights, PostMetrics, MediaItem, PostExtras } from "./types";
+import {
+  createTextPost,
+  createImagePost,
+  createVideoPost,
+  createCarouselPost,
+} from "./api-publish";
 
 const BASE_URL = "https://graph.threads.net/v1.0";
-const CONTAINER_POLL_TIMEOUT_MS = 60_000;
-const VIDEO_POLL_TIMEOUT_MS = 300_000;
-const CONTAINER_POLL_INTERVAL_MS = 2_000;
-const CAROUSEL_MIN_ITEMS = 2;
-const CAROUSEL_MAX_ITEMS = 20;
 
 export function extractPostId(idOrUrl: string): string {
   const urlMatch = idOrUrl.match(/threads\.net\/@[\w.]+\/post\/(\w+)/);
@@ -19,10 +20,11 @@ export function detectMediaType(url: string): "IMAGE" | "VIDEO" {
 export class ThreadsAPI {
   constructor(
     private accessToken: string,
-    private userId: string
+    readonly userId: string
   ) {}
 
-  private async fetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  /** Internal: shared Graph API request helper. Public so api-publish.ts helpers can reuse it. */
+  async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = new URL(`${BASE_URL}${endpoint}`);
     url.searchParams.set("access_token", this.accessToken);
 
@@ -36,7 +38,7 @@ export class ThreadsAPI {
 
   async getProfile(): Promise<ThreadsProfile> {
     const fields = "id,username,name,threads_profile_picture_url,threads_biography";
-    const data = await this.fetch<any>(`/me?fields=${fields}`);
+    const data = await this.request<any>(`/me?fields=${fields}`);
     return {
       id: data.id,
       username: data.username,
@@ -47,7 +49,7 @@ export class ThreadsAPI {
   }
 
   async getFollowerCount(): Promise<number> {
-    const data = await this.fetch<any>(`/me/threads_insights?metric=followers_count`);
+    const data = await this.request<any>(`/me/threads_insights?metric=followers_count`);
     const metric = data.data?.find((m: any) => m.name === "followers_count");
     return metric?.total_value?.value || 0;
   }
@@ -60,7 +62,7 @@ export class ThreadsAPI {
 
   async getPosts(limit: number = 25): Promise<ThreadsPost[]> {
     const fields = "id,text,timestamp,media_type,media_url,permalink";
-    const data = await this.fetch<any>(
+    const data = await this.request<any>(
       `/${this.userId}/threads?fields=${fields}&limit=${limit}`
     );
 
@@ -83,7 +85,7 @@ export class ThreadsAPI {
   async getPost(postId: string): Promise<ThreadsPost> {
     const id = extractPostId(postId);
     const fields = "id,text,timestamp,media_type,media_url,permalink";
-    const data = await this.fetch<any>(`/${id}?fields=${fields}`);
+    const data = await this.request<any>(`/${id}?fields=${fields}`);
     const metrics = await this.getPostMetrics(id).catch(() => undefined);
 
     return {
@@ -99,7 +101,7 @@ export class ThreadsAPI {
 
   async getPostMetrics(postId: string): Promise<PostMetrics> {
     const metrics = "views,likes,replies,reposts,quotes,shares,clicks";
-    const data = await this.fetch<any>(`/${postId}/insights?metric=${metrics}`);
+    const data = await this.request<any>(`/${postId}/insights?metric=${metrics}`);
 
     const result: PostMetrics = {
       views: 0,
@@ -122,7 +124,7 @@ export class ThreadsAPI {
   async getReplies(postId: string): Promise<ThreadsPost[]> {
     const id = extractPostId(postId);
     const fields = "id,text,timestamp,username,permalink";
-    const data = await this.fetch<any>(`/${id}/replies?fields=${fields}`);
+    const data = await this.request<any>(`/${id}/replies?fields=${fields}`);
 
     return (data.data || []).map((reply: any) => ({
       id: reply.id,
@@ -132,179 +134,43 @@ export class ThreadsAPI {
     }));
   }
 
-  private async waitForContainer(
-    containerId: string,
-    options: { timeoutMs?: number; intervalMs?: number } = {}
-  ): Promise<void> {
-    const timeoutMs = options.timeoutMs ?? CONTAINER_POLL_TIMEOUT_MS;
-    const intervalMs = options.intervalMs ?? CONTAINER_POLL_INTERVAL_MS;
-    const startedAt = Date.now();
-    const deadline = startedAt + timeoutMs;
-    while (true) {
-      const { status, error_message } = await this.fetch<{ status?: string; error_message?: string }>(
-        `/${containerId}?fields=status,error_message`
-      );
-      if (status === "FINISHED") return;
-      if (status === "ERROR" || status === "EXPIRED") {
-        throw new Error(`Threads container ${status}: ${error_message ?? "no error message"}`);
-      }
-      if (Date.now() + intervalMs > deadline) {
-        const elapsedMs = Date.now() - startedAt;
-        throw new Error(`Threads container not ready after ${elapsedMs}ms (timeout ${timeoutMs}ms, status=${status ?? "unknown"})`);
-      }
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    }
-  }
-
-  private async createContainer(params: Record<string, string>): Promise<string> {
-    const data = await this.fetch<{ id: string }>(`/${this.userId}/threads`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(params),
-    });
-    return data.id;
-  }
-
-  private async publishContainer(creationId: string): Promise<string> {
-    const data = await this.fetch<{ id: string }>(`/${this.userId}/threads_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ creation_id: creationId }),
-    });
-    return data.id;
-  }
-
-  private async createAndPublish(
-    params: Record<string, string>,
-    waitOptions?: { timeoutMs?: number; intervalMs?: number }
-  ): Promise<string> {
-    const containerId = await this.createContainer(params);
-    await this.waitForContainer(containerId, waitOptions);
-    return this.publishContainer(containerId);
-  }
-
-  private applyExtras(
-    params: Record<string, string>,
-    extras?: PostExtras,
-    allowTextOnly = false
-  ): void {
-    if (!extras) return;
-    if (extras.topicTag) {
-      params.topic_tag = extras.topicTag;
-    }
-    if (allowTextOnly) {
-      if (extras.linkAttachment) {
-        params.link_attachment = extras.linkAttachment;
-      }
-      if (extras.gif) {
-        params.gif_attachment = JSON.stringify({
-          gif_id: extras.gif.id,
-          provider: extras.gif.provider ?? "giphy",
-        });
-      }
-    }
-  }
-
   async deletePost(postId: string): Promise<void> {
     const id = extractPostId(postId);
-    await this.fetch<unknown>(`/${id}`, { method: "DELETE" });
+    await this.request<unknown>(`/${id}`, { method: "DELETE" });
   }
 
-  async createTextPost(text: string, replyToId?: string, extras?: PostExtras): Promise<string> {
-    const params: Record<string, string> = { media_type: "TEXT", text };
-    if (replyToId) {
-      params.reply_to_id = replyToId;
-    }
-    this.applyExtras(params, extras, true);
-    return this.createAndPublish(params);
+  // Publishing — thin delegations to api-publish.ts (keeps this file under the 300-line limit).
+
+  createTextPost(text: string, replyToId?: string, extras?: PostExtras): Promise<string> {
+    return createTextPost(this, text, replyToId, extras);
   }
 
-  async createImagePost(
+  createImagePost(
     text: string,
     imageUrl: string,
     replyToId?: string,
     altText?: string,
     extras?: PostExtras
   ): Promise<string> {
-    const params: Record<string, string> = { media_type: "IMAGE", image_url: imageUrl, text };
-    if (replyToId) {
-      params.reply_to_id = replyToId;
-    }
-    if (altText) {
-      params.alt_text = altText;
-    }
-    this.applyExtras(params, extras);
-    return this.createAndPublish(params);
+    return createImagePost(this, text, imageUrl, replyToId, altText, extras);
   }
 
-  async createVideoPost(
+  createVideoPost(
     text: string,
     videoUrl: string,
     replyToId?: string,
     altText?: string,
     extras?: PostExtras
   ): Promise<string> {
-    const params: Record<string, string> = { media_type: "VIDEO", video_url: videoUrl, text };
-    if (replyToId) {
-      params.reply_to_id = replyToId;
-    }
-    if (altText) {
-      params.alt_text = altText;
-    }
-    this.applyExtras(params, extras);
-    return this.createAndPublish(params, { timeoutMs: VIDEO_POLL_TIMEOUT_MS });
+    return createVideoPost(this, text, videoUrl, replyToId, altText, extras);
   }
 
-  async createCarouselPost(
+  createCarouselPost(
     text: string,
     items: MediaItem[],
     replyToId?: string,
     extras?: PostExtras
   ): Promise<string> {
-    if (items.length < CAROUSEL_MIN_ITEMS || items.length > CAROUSEL_MAX_ITEMS) {
-      throw new Error(
-        `Carousel requires ${CAROUSEL_MIN_ITEMS}-${CAROUSEL_MAX_ITEMS} items (got ${items.length})`
-      );
-    }
-
-    const childIds: string[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const type = item.type ?? detectMediaType(item.url);
-      const childParams: Record<string, string> = {
-        media_type: type,
-        is_carousel_item: "true",
-      };
-      if (type === "VIDEO") {
-        childParams.video_url = item.url;
-      } else {
-        childParams.image_url = item.url;
-      }
-      if (item.alt) {
-        childParams.alt_text = item.alt;
-      }
-
-      const childId = await this.createContainer(childParams);
-      try {
-        await this.waitForContainer(
-          childId,
-          type === "VIDEO" ? { timeoutMs: VIDEO_POLL_TIMEOUT_MS } : undefined
-        );
-      } catch (error) {
-        throw new Error(`Carousel item ${i + 1} (${item.url}) failed: ${(error as Error).message}`);
-      }
-      childIds.push(childId);
-    }
-
-    const params: Record<string, string> = {
-      media_type: "CAROUSEL",
-      children: childIds.join(","),
-      text,
-    };
-    if (replyToId) {
-      params.reply_to_id = replyToId;
-    }
-    this.applyExtras(params, extras);
-    return this.createAndPublish(params);
+    return createCarouselPost(this, text, items, replyToId, extras);
   }
 }
