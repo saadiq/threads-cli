@@ -20,6 +20,26 @@ export function parseDraft(filePath: string): Draft {
   };
 }
 
+const FRONTMATTER_KEY = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+/**
+ * Thread files use `---` both as a frontmatter fence and as the post separator,
+ * so a leading block only counts as frontmatter when it parses as a YAML mapping
+ * whose keys look like frontmatter fields. A scalar, a list, prose that happens
+ * to contain a colon, or malformed YAML is really the first post: return the
+ * text untouched instead of swallowing it (or throwing a YAMLException).
+ */
+export function stripFrontmatter(raw: string): string {
+  try {
+    const { data, content } = matter(raw);
+    if (!data || typeof data !== "object" || Array.isArray(data)) return raw;
+    if (!Object.keys(data).every((k) => FRONTMATTER_KEY.test(k))) return raw;
+    return content;
+  } catch {
+    return raw;
+  }
+}
+
 export function createDraft(draftsDir: string, title?: string): string {
   const timestamp = new Date().toISOString();
   const slug = title

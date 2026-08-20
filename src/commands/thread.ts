@@ -6,18 +6,19 @@ import { ThreadsAPI, detectMediaType } from "../lib/api";
 import { publishMedia } from "../lib/publish-media";
 import { loadConfig, expandPath } from "../lib/config";
 import type { ThreadPost, MediaItem } from "../lib/types";
-import { countLinks, DRAFT_LINK_LIMIT } from "../lib/drafts";
+import { countLinks, DRAFT_LINK_LIMIT, stripFrontmatter } from "../lib/drafts";
 import { confirm } from "../utils/display";
 
 const RATE_LIMIT_DELAY_MS = 1000;
+// Thread separator: `---` alone on a line, including the very first and last line.
+const POST_SEPARATOR = /^---[ \t]*$/m;
 // Leading image markdown: ![alt](url), optionally followed by content on the same line.
 const IMAGE_LINE = /^!\[(.*?)\]\((.*?)\)\s*(.*)$/;
 
-function parseThreadFile(filePath: string): ThreadPost[] {
-  const raw = readFileSync(filePath, "utf-8");
+export function parseThreadFile(filePath: string): ThreadPost[] {
+  const raw = stripFrontmatter(readFileSync(filePath, "utf-8").replace(/\r\n/g, "\n"));
 
-  // Split by --- on its own line (thread separator)
-  const parts = raw.split(/\n---\n/).map((p) => p.trim()).filter(Boolean);
+  const parts = raw.split(POST_SEPARATOR).map((p) => p.trim()).filter(Boolean);
 
   return parts.map((part) => {
     // Consume contiguous leading image lines; trailing text ends the run.
