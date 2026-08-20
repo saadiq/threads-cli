@@ -227,6 +227,13 @@ A post may start with one or more `![alt](url)` image lines; stacked image lines
 become a carousel (up to 20 items), and trailing text on the same line as the
 last image becomes that post's caption.
 
+A thread file may also open with YAML frontmatter (e.g. `title:`), which is
+stripped before the posts are split. Frontmatter fields are ignored by `thread`
+— per-post media comes from `![alt](url)` lines, not frontmatter. A leading `---`
+block is only treated as frontmatter when it parses as a YAML mapping whose keys
+look like frontmatter fields, so a file that opens with a bare separator (or a
+first post containing a colon) still keeps every post.
+
 ## Configuration
 
 Config is stored at `~/.threads-cli/config.json`:

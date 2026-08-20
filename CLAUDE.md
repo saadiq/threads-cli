@@ -39,7 +39,8 @@ This is a CLI tool for publishing to Threads and fetching Threads data as JSON.
 
 - Config stored at `~/.threads-cli/config.json` with 0o600 permissions
 - Drafts are markdown files with YAML frontmatter (title, image, alt, created)
-- Thread files are markdown with posts separated by `---` on its own line; optional `![alt](url)` at the start of a post attaches an image
+- Thread files are markdown with posts separated by `---` on its own line (including the first/last line); optional `![alt](url)` at the start of a post attaches an image
+- `stripFrontmatter()` in `drafts.ts` only strips a leading `---` block when it parses as a YAML mapping with identifier-like keys, so a thread file that opens with a bare separator (or whose first post contains a colon) keeps its first post instead of losing it to gray-matter
 - All data commands (posts, profile) output JSON to stdout
 - Auth check pattern: `getValidAccessToken()` returns null if not authenticated
 - Path traversal protection in draft delete command
