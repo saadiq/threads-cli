@@ -5,6 +5,7 @@ import type { Draft, DraftFrontmatter } from "./types";
 
 export const DRAFT_CHAR_LIMIT = 500;
 export const DRAFT_LINK_LIMIT = 5;
+export const DRAFT_MEDIA_LIMIT = 20;
 
 export function countLinks(text: string): number {
   return text.match(/https?:\/\/\S+/g)?.length ?? 0;
@@ -65,23 +66,32 @@ export function listDrafts(draftsDir: string): Draft[] {
   return files.map((f) => parseDraft(join(draftsDir, f)));
 }
 
-export function validateDraft(draft: Draft, hasMedia = false): { valid: boolean; errors: string[] } {
+export function validatePost(content: string, mediaCount = 0): string[] {
   const errors: string[] = [];
 
-  if (!hasMedia && (!draft.content || draft.content.trim().length === 0)) {
-    errors.push("Draft has no content");
+  if (mediaCount === 0 && (!content || content.trim().length === 0)) {
+    errors.push("Post has no content");
   }
 
-  if (draft.content.length > DRAFT_CHAR_LIMIT) {
-    errors.push(`Content exceeds ${DRAFT_CHAR_LIMIT} characters (${draft.content.length})`);
+  if (content.length > DRAFT_CHAR_LIMIT) {
+    errors.push(`Content exceeds ${DRAFT_CHAR_LIMIT} characters (${content.length})`);
   }
 
-  const links = countLinks(draft.content);
+  const links = countLinks(content);
   if (links >= DRAFT_LINK_LIMIT) {
     errors.push(
       `Contains ${links} links; Threads rejects posts with ${DRAFT_LINK_LIMIT}+ links (THREADS_API__LINK_LIMIT_EXCEEDED)`
     );
   }
 
+  if (mediaCount > DRAFT_MEDIA_LIMIT) {
+    errors.push(`Has ${mediaCount} media items; carousels allow at most ${DRAFT_MEDIA_LIMIT}.`);
+  }
+
+  return errors;
+}
+
+export function validateDraft(draft: Draft, mediaCount = 0): { valid: boolean; errors: string[] } {
+  const errors = validatePost(draft.content, mediaCount);
   return { valid: errors.length === 0, errors };
 }

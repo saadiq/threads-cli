@@ -7,6 +7,7 @@ import {
   countLinks,
   DRAFT_CHAR_LIMIT,
   DRAFT_LINK_LIMIT,
+  DRAFT_MEDIA_LIMIT,
 } from "./drafts";
 import { rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -82,19 +83,19 @@ describe("validateDraft", () => {
     const draft = createTestDraft("");
     const result = validateDraft(draft);
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain("Draft has no content");
+    expect(result.errors).toContain("Post has no content");
   });
 
   test("returns error for whitespace-only content", () => {
     const draft = createTestDraft("   \n\t  ");
     const result = validateDraft(draft);
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain("Draft has no content");
+    expect(result.errors).toContain("Post has no content");
   });
 
   test("accepts empty content when media is present", () => {
     const draft = createTestDraft("");
-    const result = validateDraft(draft, true);
+    const result = validateDraft(draft, 1);
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
@@ -135,6 +136,17 @@ describe("validateDraft", () => {
     const draft = createTestDraft(content);
     const result = validateDraft(draft);
     expect(result.valid).toBe(true);
+  });
+
+  test("accepts a carousel exactly at the media limit", () => {
+    const result = validateDraft(createTestDraft("caption"), DRAFT_MEDIA_LIMIT);
+    expect(result.valid).toBe(true);
+  });
+
+  test("rejects a carousel over the media limit", () => {
+    const result = validateDraft(createTestDraft("caption"), DRAFT_MEDIA_LIMIT + 1);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes(`at most ${DRAFT_MEDIA_LIMIT}`))).toBe(true);
   });
 });
 

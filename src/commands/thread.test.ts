@@ -92,6 +92,17 @@ Second post
 });
 
 describe("thread command preflight", () => {
+  test("reports every invalid post before publishing", async () => {
+    const file = writeThread(`${"x".repeat(501)}\n\n---\n\n${"y".repeat(600)}\n`);
+
+    const result = await runThread(file);
+
+    expect(result.exitCode).not.toBe(0);
+    const stderr = result.stderr.toString();
+    expect(stderr).toContain("Post 1: Content exceeds 500 characters (501)");
+    expect(stderr).toContain("Post 2: Content exceeds 500 characters (600)");
+  });
+
   test("does not crash on a malformed leading block", async () => {
     const file = writeThread("---\nMy thoughts: on stuff: today\n---\nSecond post\n");
 

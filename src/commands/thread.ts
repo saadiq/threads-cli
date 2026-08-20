@@ -6,7 +6,7 @@ import { ThreadsAPI, detectMediaType } from "../lib/api";
 import { publishMedia } from "../lib/publish-media";
 import { loadConfig, expandPath } from "../lib/config";
 import type { ThreadPost, MediaItem } from "../lib/types";
-import { countLinks, DRAFT_LINK_LIMIT, stripFrontmatter } from "../lib/drafts";
+import { stripFrontmatter, validatePost } from "../lib/drafts";
 import { confirm } from "../utils/display";
 
 const RATE_LIMIT_DELAY_MS = 1000;
@@ -77,19 +77,12 @@ export function createThreadCommand(): Command {
         process.exit(1);
       }
 
-      for (let i = 0; i < posts.length; i++) {
-        const links = countLinks(posts[i].content);
-        if (links >= DRAFT_LINK_LIMIT) {
-          console.error(
-            `Post ${i + 1} contains ${links} links; Threads rejects posts with ${DRAFT_LINK_LIMIT}+ links (THREADS_API__LINK_LIMIT_EXCEEDED)`
-          );
-          process.exit(1);
-        }
-        const mediaCount = posts[i].images?.length ?? 0;
-        if (mediaCount > 20) {
-          console.error(`Post ${i + 1} has ${mediaCount} media items; carousels allow at most 20.`);
-          process.exit(1);
-        }
+      const errors = posts.flatMap((post, i) =>
+        validatePost(post.content, post.images?.length ?? 0).map((e) => `Post ${i + 1}: ${e}`)
+      );
+      if (errors.length > 0) {
+        errors.forEach((e) => console.error(e));
+        process.exit(1);
       }
 
       // Display preview

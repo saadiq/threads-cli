@@ -57,7 +57,7 @@ export function createPublishCommand(): Command {
       const media = resolveMedia(fm);
       const extras = resolveExtras(fm);
 
-      const { valid, errors } = validateDraft(draft, media.length > 0);
+      const { valid, errors } = validateDraft(draft, media.length);
 
       if (!valid) {
         console.error("Validation errors:");
@@ -65,10 +65,6 @@ export function createPublishCommand(): Command {
         process.exit(1);
       }
 
-      if (media.length > 20) {
-        console.error(`Draft has ${media.length} media items; carousels allow at most 20.`);
-        process.exit(1);
-      }
       if (media.length > 0 && (fm.link || fm.gif)) {
         console.error("link/gif attachments are only allowed on text-only posts.");
         process.exit(1);
